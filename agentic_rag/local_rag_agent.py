@@ -353,16 +353,22 @@ class LocalRAGAgent:
             try:
                 synthesis_result = self.agents["synthesizer"].synthesize(query, reasoning_steps)
                 logger.info("Synthesis step completed")
+                
+                # Handle case where synthesis_result is a string instead of dict
+                if isinstance(synthesis_result, str):
+                    answer = synthesis_result
+                else:
+                    answer = synthesis_result.get("answer", synthesis_result)
+                
+                return {
+                    "answer": answer,
+                    "reasoning_steps": reasoning_steps,
+                    "context": context
+                }
             except Exception as e:
                 logger.error(f"Error in synthesis step: {str(e)}")
                 logger.info("Falling back to general response")
                 return self._generate_general_response(query)
-            
-            return {
-                "answer": synthesis_result["answer"],
-                "reasoning_steps": reasoning_steps,
-                "context": context
-            }
             
         except Exception as e:
             logger.error(f"Error in CoT processing: {str(e)}")
