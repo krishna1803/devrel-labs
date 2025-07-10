@@ -13,10 +13,16 @@ from langchain_core.prompts import PromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.runnable import RunnablePassthrough
 
-
 # Local imports
-import OraDBVectorStore
 from agents.agent_factory import create_agents
+try:
+    from OraDBVectorStore import OraDBVectorStore
+    ORACLE_DB_AVAILABLE = True
+except ImportError:
+    ORACLE_DB_AVAILABLE = False
+    print("Oracle DB support not available. Install with: pip install oracledb sentence-transformers")
+    
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
