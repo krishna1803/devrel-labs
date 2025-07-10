@@ -291,6 +291,7 @@ def create_interface():
         model_choices = []
         # Only Ollama models (no more local Mistral deployments)
         model_choices.extend([
+            "qwq",
             "qwen2",
             "gemma3",
             "llama3.3",
