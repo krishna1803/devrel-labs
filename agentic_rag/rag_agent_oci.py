@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 import oci
 from langchain_community.embeddings import OCIGenAIEmbeddings
 from langchain_community.llms.oci_generative_ai import OCIGenAI
+from langchain_core.prompts import PromptTemplate
+from langchain.schema.output_parser import StrOutputParser
+from langchain.schema.runnable import RunnablePassthrough
 
 
 # Local imports
@@ -42,6 +45,7 @@ class OCIRAGAgent:
                  model_id: str = "cohere.command-r", compartment_id: str = None):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
+        self.retriever = vector_store.as_retriever()
         self.use_cot = use_cot
         self.collection = collection
         self.model_id = model_id
@@ -52,10 +56,10 @@ class OCIRAGAgent:
         self.genai_client = OCIGenAI(
             auth_profile= CONFIG_PROFILE,
             auth_file_location= MY_CONFIG_FILE_LOCATION,
-            model_id=model_id
+            model_id=model_id,
             compartment_id=self.compartment_id,
             service_endpoint=SERVICE_ENDPOINT,
-            provider="cohere"
+            provider="cohere",
             model_kwargs={"temperature": 0, "max_tokens": 1500 }#, "stop": ["populous"]} # new endpoint
         )
         
@@ -274,55 +278,15 @@ Answer the question based on the context provided. If the answer is not in the c
         
         user_content = f"Context:\n{formatted_context}\n\nQuestion: {query}"
         
-        # Choose between Cohere and Claude based on model_id
-        if "cohere" in self.model_id.lower():
-            # For Cohere models
-            chat_request = CohereChatRequest(
-                model_id=self.model_id,
-                message=user_content,
-                system_prompt=system_prompt
-            )
-            
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    cohere_chat_request=chat_request
-                )
-            )
-            answer = response.data.cohere_chat_response.text
-            
-        elif "claude" in self.model_id.lower():
-            # For Claude models
-            message_input = ClaudeMessageInput(
-                anthropic_version="bedrock-2023-05-31",
-                max_tokens=1024,
-                messages=[
-                    ClaudeMessage(role="user", content=user_content)
-                ],
-                system=system_prompt
-            )
-            
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    claude_message_input=message_input
-                )
-            )
-            answer = response.data.claude_message_output.content[0].text
-            
-        else:
-            # Default to text generation for other models
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    prompt=f"{system_prompt}\n\n{user_content}",
-                    model_id=self.model_id
-                )
-            )
-            answer = response.data.text
+        prompt = PromptTemplate.from_template(user_content)
+        chain = (
+            {"context": self.retriever, 
+            "input": RunnablePassthrough()}
+            | prompt
+            | self.genai_client
+            | StrOutputParser()
+)
+        answer = chain.invoke({"query": query, "context": context})
         
         # Add sources to response if available
         sources = {}
@@ -360,56 +324,17 @@ Answer the question based on the context provided. If the answer is not in the c
         system_prompt = "You are a helpful AI assistant. Answer the following query using your general knowledge."
         user_content = f"Query: {query}\n\nAnswer:"
         
-        # Choose between Cohere and Claude based on model_id
-        if "cohere" in self.model_id.lower():
-            # For Cohere models
-            chat_request = CohereChatRequest(
-                model_id=self.model_id,
-                message=user_content,
-                system_prompt=system_prompt
-            )
-            
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    cohere_chat_request=chat_request
-                )
-            )
-            answer = response.data.cohere_chat_response.text
-            
-        elif "claude" in self.model_id.lower():
-            # For Claude models
-            message_input = ClaudeMessageInput(
-                anthropic_version="bedrock-2023-05-31",
-                max_tokens=1024,
-                messages=[
-                    ClaudeMessage(role="user", content=user_content)
-                ],
-                system=system_prompt
-            )
-            
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    claude_message_input=message_input
-                )
-            )
-            answer = response.data.claude_message_output.content[0].text
-            
-        else:
-            # Default to text generation for other models
-            response = self.genai_client.generate_text(
-                generate_text_details=GenerateTextDetails(
-                    compartment_id=self.compartment_id,
-                    serving_mode={"serving_type": "ON_DEMAND"},
-                    prompt=f"{system_prompt}\n\n{user_content}",
-                    model_id=self.model_id
-                )
-            )
-            answer = response.data.text
+        prompt = PromptTemplate.from_template(user_content)
+        chain = (
+            {"input": RunnablePassthrough()}
+            | prompt
+            | self.genai_client
+            | StrOutputParser()
+        )
+        answer = chain.invoke({"query": query})
+        # Return a general response without context
         
+        logger.info("No context available, using general knowledge response")    
         return {
             "answer": answer,
             "context": []
@@ -442,7 +367,8 @@ def main():
     print("=" * 50)
     
     try:
-        store = OraDBVectorStore(persist_directory=args.store_path)
+        store = OraDBVectorStore()
+            
         agent = OCIRAGAgent(
             store,
             use_cot=args.use_cot,
@@ -450,6 +376,7 @@ def main():
             model_id=args.model_id,
             compartment_id=compartment_id
         )
+    
         
         print(f"\nProcessing query: {args.query}")
         print("=" * 50)
