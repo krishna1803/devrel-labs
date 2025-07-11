@@ -351,7 +351,7 @@ def main():
     parser.add_argument("--use-cot", action="store_true", help="Enable Chain of Thought reasoning")
     parser.add_argument("--collection", choices=["PDF Collection", "Repository Collection", "Web Knowledge Base", "General Knowledge"], 
                         help="Specify which collection to query")
-    parser.add_argument("--model-id", default="cohere.command-r", help="OCI Gen AI model ID to use")
+    parser.add_argument("--model-id", default="cohere.command-r-plus-08-2024", help="OCI Gen AI model ID to use")
     parser.add_argument("--compartment-id", help="OCI compartment ID")
     parser.add_argument("--verbose", action="store_true", help="Show full content of sources")
     
