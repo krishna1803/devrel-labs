@@ -72,7 +72,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
             self._embedding_function = embedding_function
 
         self.collection_name = collection_name
-
+        self.encoder = SentenceTransformer('all-MiniLM-L12-v2')
         self.override_relevance_score_fn = relevance_score_fn
         
          # Load Oracle DB credentials from config.yaml
@@ -202,6 +202,131 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         }
         
         return result
+    
+    def query_pdf_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        """Query the PDF documents collection"""
+        print("🔍 [Oracle DB] Querying PDF Collection")
+        # Generate Embeddings
+        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
+        new_vector = array.array("f", embeddings)
+
+        sql = """
+            SELECT Id, Text, MetaData, Embedding
+            FROM PDFCOLLECTION
+            ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
+            FETCH FIRST 10 ROWS ONLY
+            """
+
+        self.cursor.execute(sql, {"nv": new_vector})
+
+        # Fetch all rows
+        rows = self.cursor.fetchall()
+        
+        # Format results
+        formatted_results = []
+        for row in rows:
+            result = {
+                "content": row[1],
+                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+            }
+            formatted_results.append(result)
+        
+        print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from PDF Collection")
+        return formatted_results
+    
+    def query_web_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        """Query the web documents collection"""
+        print("🔍 [Oracle DB] Querying Web Collection")
+        # Generate Embeddings
+        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
+        new_vector = array.array("f", embeddings)
+
+        sql = """
+            SELECT Id, Text, MetaData, Embedding
+            FROM WebCOLLECTION
+            ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
+            FETCH FIRST 10 ROWS ONLY
+            """
+
+        self.cursor.execute(sql, {"nv": new_vector})
+
+        # Fetch all rows
+        rows = self.cursor.fetchall()
+
+        # Format results
+        formatted_results = []
+        for row in rows:
+            result = {
+                "content": row[1],
+                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+            }
+            formatted_results.append(result)
+        
+        print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from Web Collection")
+        return formatted_results
+    
+    def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        """Query the general knowledge collection"""
+        print("🔍 [Oracle DB] Querying General Knowledge Collection")
+        # Generate Embeddings
+        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
+        new_vector = array.array("f", embeddings)
+
+        sql = """
+            SELECT Id, Text, MetaData, Embedding
+            FROM GeneralCollection
+            ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
+            FETCH FIRST 10 ROWS ONLY
+            """
+
+        self.cursor.execute(sql, {"nv": new_vector})
+
+        # Fetch all rows
+        rows = self.cursor.fetchall()
+
+        # Format results
+        formatted_results = []
+        for row in rows:
+            result = {
+                "content": row[1],
+                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+            }
+            formatted_results.append(result)
+        
+        print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from General Knowledge Collection")
+        return formatted_results
+    
+    def query_repo_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        """Query the repository documents collection"""
+        print("🔍 [Oracle DB] Querying Repository Collection")
+        # Generate Embeddings
+        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
+        new_vector = array.array("f", embeddings)
+
+        sql = """
+            SELECT Id, Text, MetaData, Embedding
+            FROM RepoCOLLECTION
+            ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
+            FETCH FIRST 10 ROWS ONLY
+            """
+
+        self.cursor.execute(sql, {"nv": new_vector})
+
+        # Fetch all rows
+        rows = self.cursor.fetchall()
+        
+        # Format results
+        formatted_results = []
+        for row in rows:
+            result = {
+                "content": row[1],
+                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+            }
+            formatted_results.append(result)
+        
+        print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from Repository Collection")
+        return formatted_results
+        
     
     @property # used to create a read-only property
     def embeddings(self) -> Optional[Embeddings]:
