@@ -16,7 +16,7 @@ from langchain.schema.runnable import RunnablePassthrough
 # Local imports
 from agents.agent_factory import create_agents
 try:
-    from OraDBVectorStore import OraDBVectorStore
+    from OracleDBVectorStore import OracleDBVectorStore
     ORACLE_DB_AVAILABLE = True
 except ImportError:
     ORACLE_DB_AVAILABLE = False
@@ -47,7 +47,7 @@ def load_oci_config():
     return oci_config
 
 class OCIRAGAgent:
-    def __init__(self, vector_store: OraDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
+    def __init__(self, vector_store: OracleDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
                  model_id: str = "cohere.command-r", compartment_id: str = None):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
@@ -373,7 +373,7 @@ def main():
     print("=" * 50)
     
     try:
-        store = OraDBVectorStore()
+        store = OracleDBVectorStore()
             
         agent = OCIRAGAgent(
             store,
