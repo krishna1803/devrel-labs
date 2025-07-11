@@ -25,9 +25,13 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 
 import oracledb
-
+import argparse
 import logging
 from pathlib import Path
+import yaml
+import json
+
+from sentence_transformers import SentenceTransformer
 
 
 # Configure logging
