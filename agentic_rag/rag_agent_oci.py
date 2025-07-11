@@ -48,7 +48,7 @@ def load_oci_config():
 
 class OCIRAGAgent:
     def __init__(self, vector_store: OracleDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
-                 model_id: str = "cohere.command-r", compartment_id: str = None):
+                 model_id: str = "cohere.command-r-plus-08-2024", compartment_id: str = None):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
         self.retriever = vector_store.as_retriever()
