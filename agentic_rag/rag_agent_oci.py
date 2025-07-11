@@ -286,13 +286,11 @@ Answer the question based on the context provided. If the answer is not in the c
         
         prompt = PromptTemplate.from_template(user_content)
         chain = (
-            {"context": self.retriever, 
-            "input": RunnablePassthrough()}
-            | prompt
+            prompt
             | self.genai_client
             | StrOutputParser()
 )
-        answer = chain.invoke({"query": query, "context": context})
+        answer = chain.invoke({"query": query})
         
         # Add sources to response if available
         sources = {}
