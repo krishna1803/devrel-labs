@@ -58,10 +58,20 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         client: Optional[Any] = None,
         relevance_score_fn: Optional[Callable[[float], float]] = None,
         verbose: Optional[bool] = False,
+        connection: Optional[Any] = None,
+        cursor: Optional[Any] = None,
     ) -> None:
         self.verbose = verbose
+        
+        # Initialize default embedding model if none provided
+        if embedding_function is None:
+            # Create a default embedding model
+            model = SentenceTransformer('all-MiniLM-L6-v2')
+            self._embedding_function = model.encode
+        else:
+            self._embedding_function = embedding_function
 
-        self._embedding_function = embedding_function
+        self.collection_name = collection_name
 
         self.override_relevance_score_fn = relevance_score_fn
         
@@ -81,12 +91,15 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         try:
             if not wallet_path:
                 print(f'Connecting (no wallet) to dsn {dsn} and user {username}')
-                conn23c = oracledb.connect(user=username, password=password, dsn=dsn)
+                self.connection = oracledb.connect(user=username, password=password, dsn=dsn)
             else:
                 print(f'Connecting (with wallet) to dsn {dsn} and user {username}')
-                conn23c = oracledb.connect(user=username, password=password, dsn=dsn, 
+                self.connection = oracledb.connect(user=username, password=password, dsn=dsn, 
                                            config_dir=wallet_path, wallet_location=wallet_path, wallet_password=wallet_password)
+            self.cursor = self.connection.cursor()  
+             # Initialize cursor
             print("Oracle DB Connection successful!")
+
         except Exception as e:
             print("Oracle DB Connection failed!", e)
             raise
@@ -124,6 +137,72 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         """
         raise NotImplementedError("add_texts method must be implemented...")
 
+    def get_collection_count(self, collection_name: str) -> int:
+        """Get the total number of chunks in a collection
+        
+        Args:
+            collection_name: Name of the collection (pdf_documents, web_documents, repository_documents, general_knowledge)
+            
+        Returns:
+            Number of chunks in the collection
+        """
+        # Map collection names to table names
+        collection_map = {
+            "pdf_documents": "PDFCollection",
+            "web_documents": "WebCollection",
+            "repository_documents": "RepoCollection", 
+            "general_knowledge": "GeneralCollection"
+        }
+        
+        table_name = collection_map.get(collection_name)
+        if not table_name:
+            raise ValueError(f"Unknown collection name: {collection_name}")
+        
+        # Count the rows in the table
+        sql = f"SELECT COUNT(*) FROM {table_name}"
+        self.cursor.execute(sql)
+        count = self.cursor.fetchone()[0]
+        
+        return count
+    
+    def get_latest_chunk(self, collection_name: str) -> Dict[str, Any]:
+        """Get the most recently inserted chunk from a collection
+        
+        Args:
+            collection_name: Name of the collection (pdf_documents, web_documents, repository_documents, general_knowledge)
+            
+        Returns:
+            Dictionary containing the content and metadata of the latest chunk
+        """
+        # Map collection names to table names
+        collection_map = {
+            "pdf_documents": "PDFCollection",
+            "web_documents": "WebCollection",
+            "repository_documents": "RepoCollection", 
+            "general_knowledge": "GeneralCollection"
+        }
+        
+        table_name = collection_map.get(collection_name)
+        if not table_name:
+            raise ValueError(f"Unknown collection name: {collection_name}")
+        
+        # Get the most recently inserted row (using ID as a proxy for insertion time)
+        # This assumes IDs are assigned sequentially or have a timestamp component
+        sql = f"SELECT Id, Text, MetaData FROM {table_name} ORDER BY ROWID DESC FETCH FIRST 1 ROW ONLY"
+        self.cursor.execute(sql)
+        row = self.cursor.fetchone()
+        
+        if not row:
+            raise ValueError(f"No chunks found in collection: {collection_name}")
+        
+        result = {
+            "id": row[0],
+            "content": row[1],
+            "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+        }
+        
+        return result
+    
     @property # used to create a read-only property
     def embeddings(self) -> Optional[Embeddings]:
         return self._embedding_function
