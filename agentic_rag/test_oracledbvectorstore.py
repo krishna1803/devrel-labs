@@ -103,58 +103,8 @@ def check_collection_stats(store):
                 print("No chunks found in this collection.")
                 
         except Exception as e:
-            print(f"Error checking {name}: {str(e)}"def check_collection_stats(store):
-    """Check statistics for each collection including total chunks and latest insertion"""
-    if not store:
-        print("Skipping collection stats check as connection failed")
-        return
-    
-    print("\n=== Collection Statistics ===")
-    
-    collections = {
-        "PDF Collection": "pdf_documents",
-        "Repository Collection": "repository_documents",
-        "Web Knowledge Base": "web_documents",
-        "General Knowledge": "general_knowledge"
-    }
-    
-    for name, collection in collections.items():
-        try:
-            # Get total count
-            count = store.get_collection_count(collection)
-            print(f"\n{name}:")
-            print(f"Total chunks: {count}")
-            
-            # Get latest insertion if collection is not empty
-            if count > 0:
-                latest = store.get_latest_chunk(collection)
-                print("Latest chunk:")
-                print(f"  Content: {latest['content'][:150]}..." if len(latest['content']) > 150 else f"  Content: {latest['content']}")
-                
-                # Print metadata
-                if isinstance(latest['metadata'], str):
-                    try:
-                        metadata = json.loads(latest['metadata'])
-                    except:
-                        metadata = {"source": latest['metadata']}
-                else:
-                    metadata = latest['metadata']
-                
-                source = metadata.get('source', 'Unknown')
-                print(f"  Source: {source}")
-                
-                # Print other metadata based on collection type
-                if collection == "pdf_documents" and 'page' in metadata:
-                    print(f"  Page: {metadata['page']}")
-                elif collection == "repository_documents" and 'file_path' in metadata:
-                    print(f"  File: {metadata['file_path']}")
-                elif collection == "web_documents" and 'title' in metadata:
-                    print(f"  Title: {metadata['title']}")
-            else:
-                print("No chunks found in this collection.")
-                
-        except Exception as e:
-            print(f"Error checking {name}: {str(e)}"))   
+            print(f"Error checking {name}: {str(e)}")
+                  
 
 def check_similarity_search(store, query):
     """Perform a similarity search on the Oracle DB Vector Store"""
