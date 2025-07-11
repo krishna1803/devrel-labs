@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import oci
 from langchain_community.embeddings import OCIGenAIEmbeddings
 from langchain_community.llms.oci_generative_ai import OCIGenAI
+from langchain_community.chat_models.oci_generative_ai import ChatOCIGenAI
 from langchain_core.prompts import PromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.runnable import RunnablePassthrough
@@ -59,13 +60,21 @@ class OCIRAGAgent:
         
         # Set up OCI configuration
         config = load_oci_config()
-        self.genai_client = OCIGenAI(
+        ''' self.genai_client = OCIGenAI(
             auth_profile= CONFIG_PROFILE,
             auth_file_location= MY_CONFIG_FILE_LOCATION,
             model_id=model_id,
             compartment_id=self.compartment_id,
             service_endpoint=SERVICE_ENDPOINT,
             provider="cohere",
+            model_kwargs={"temperature": 0, "max_tokens": 1500 }#, "stop": ["populous"]} # new endpoint
+        )'''
+        self.genai_client = ChatOCIGenAI(
+            auth_profile=CONFIG_PROFILE,
+            model_id=model_id,
+            compartment_id=self.compartment_id,
+            service_endpoint=SERVICE_ENDPOINT,
+            #temperature=TEMPERATURE # old endpoint
             model_kwargs={"temperature": 0, "max_tokens": 1500 }#, "stop": ["populous"]} # new endpoint
         )
         
