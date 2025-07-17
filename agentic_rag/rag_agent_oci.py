@@ -1,3 +1,4 @@
+from html import parser
 from typing import List, Dict, Any, Optional
 import json
 import os
@@ -49,7 +50,7 @@ def load_oci_config():
 
 class OCIRAGAgent:
     def __init__(self, vector_store: OracleDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
-                 model_id: str = "cohere.command-latest", compartment_id: str = None):
+                 model_id: str = "cohere.command-latest", compartment_id: str = None, use_stream:bool = False):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
         self.retriever = vector_store.as_retriever()
@@ -57,23 +58,17 @@ class OCIRAGAgent:
         self.collection = collection
         self.model_id = model_id
         self.compartment_id = compartment_id or os.getenv("OCI_COMPARTMENT_ID")
+        self.stream = use_stream
         
         # Set up OCI configuration
         config = load_oci_config()
-        ''' self.genai_client = OCIGenAI(
-            auth_profile= CONFIG_PROFILE,
-            auth_file_location= MY_CONFIG_FILE_LOCATION,
-            model_id=model_id,
-            compartment_id=self.compartment_id,
-            service_endpoint=SERVICE_ENDPOINT,
-            provider="cohere",
-            model_kwargs={"temperature": 0, "max_tokens": 1500 }#, "stop": ["populous"]} # new endpoint
-        )'''
+        
         self.genai_client = ChatOCIGenAI(
             auth_profile=CONFIG_PROFILE,
             model_id=model_id,
             compartment_id=self.compartment_id,
             service_endpoint=SERVICE_ENDPOINT,
+            is_stream=use_stream,  # Use streaming if enabled
             #temperature=TEMPERATURE # old endpoint
             model_kwargs={"temperature": 0, "max_tokens": 1500 }#, "stop": ["populous"]} # new endpoint
         )
@@ -363,6 +358,7 @@ def main():
     parser.add_argument("--model-id", default="cohere.command-latest", help="OCI Gen AI model ID to use")
     parser.add_argument("--compartment-id", help="OCI compartment ID")
     parser.add_argument("--verbose", action="store_true", help="Show full content of sources")
+    parser.add_argument("--use-stream", action="store_true", help="eable streaming responses from OCI Gen AI") 
     
     args = parser.parse_args()
     
@@ -387,7 +383,8 @@ def main():
             use_cot=args.use_cot,
             collection=args.collection,
             model_id=args.model_id,
-            compartment_id=compartment_id
+            compartment_id=compartment_id,
+            use_stream=args.use_stream
         )
     
         
