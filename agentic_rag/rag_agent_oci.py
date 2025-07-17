@@ -58,7 +58,7 @@ class OCIRAGAgent:
         self.collection = collection
         self.model_id = model_id
         self.compartment_id = compartment_id or os.getenv("OCI_COMPARTMENT_ID")
-        self.stream = use_stream
+        self.use_stream = use_stream
         
         # Set up OCI configuration
         config = load_oci_config()
@@ -289,12 +289,29 @@ Answer the question based on the context provided. If the answer is not in the c
         user_content = f"Context:\n{formatted_context}\n\nQuestion: {query}"
         
         prompt = PromptTemplate.from_template(user_content)
-        chain = (
-            prompt
-            | self.genai_client
-            | StrOutputParser()
-)
-        answer = chain.invoke({"query": query})
+        
+        if self.use_stream:
+            print("Generating streaming response...")
+            chain = (
+                prompt
+                | self.genai_client
+            )
+            response = chain.invoke({"query": query})
+            # For streaming, we need to collect the tokens
+            answer = ""
+            for chunk in response:
+                content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                print(content, end="", flush=True)
+                answer += content
+            print()  # Add newline after streaming completes
+        else:
+            # Non-streaming response
+            chain = (
+                prompt
+                | self.genai_client
+                | StrOutputParser()
+            )
+            answer = chain.invoke({"query": query})
         
         # Add sources to response if available
         sources = {}
@@ -323,8 +340,7 @@ Answer the question based on the context provided. If the answer is not in the c
         
         return {
             "answer": answer,
-            "context": context,
-            "sources": sources
+            "context": context
         }
 
     def _generate_general_response(self, query: str) -> Dict[str, Any]:
@@ -358,8 +374,8 @@ def main():
     parser.add_argument("--model-id", default="cohere.command-latest", help="OCI Gen AI model ID to use")
     parser.add_argument("--compartment-id", help="OCI compartment ID")
     parser.add_argument("--verbose", action="store_true", help="Show full content of sources")
-    parser.add_argument("--use-stream", action="store_true", help="eable streaming responses from OCI Gen AI") 
-    
+    parser.add_argument("--use-stream", action="store_true", help="Enable streaming responses from OCI Gen AI")
+
     args = parser.parse_args()
     
     # Load environment variables
