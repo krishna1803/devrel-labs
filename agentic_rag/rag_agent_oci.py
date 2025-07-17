@@ -79,7 +79,7 @@ class OCIRAGAgent:
         )
         
         # Initialize specialized agents
-        self.agents = create_agents(self.genai_client, vector_store, self.model_id, self.compartment_id) if use_cot else None
+        self.agents = create_agents(self.genai_client, vector_store) if use_cot else None
     
     def process_query(self, query: str) -> Dict[str, Any]:
         """Process a user query using the agentic RAG pipeline"""
