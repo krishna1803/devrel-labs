@@ -321,7 +321,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
         new_vector = array.array("f", embeddings)
 
-        sql = """
+        sql = f"""
             SELECT Id, Text, MetaData, Embedding
             FROM PDFCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
@@ -352,7 +352,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
         new_vector = array.array("f", embeddings)
 
-        sql = """
+        sql = f"""
             SELECT Id, Text, MetaData, Embedding
             FROM WebCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
@@ -383,7 +383,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
         new_vector = array.array("f", embeddings)
 
-        sql = """
+        sql = f"""
             SELECT Id, Text, MetaData, Embedding
             FROM GeneralCollection
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
@@ -414,7 +414,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
         new_vector = array.array("f", embeddings)
 
-        sql = """
+        sql = f"""
             SELECT Id, Text, MetaData, Embedding
             FROM RepoCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
@@ -462,11 +462,11 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         # 1. embed the query
         embed_query = self._embedding_function(query)
         new_vector = array.array("f", embed_query)
-        sql = """
+        sql = f"""
             SELECT Id, Text, MetaData, Embedding
             FROM PDFCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
-            FETCH FIRST 10 ROWS ONLY
+            FETCH FIRST {k} ROWS ONLY
             """
 
         self.cursor.execute(sql, {"nv": new_vector})
