@@ -20,8 +20,8 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_postgres import PGVector
 
-import psycopg
-#from psycopg.extras import Json
+import psycopg2
+#from psycopg2.extras import Json
 import argparse
 from pathlib import Path
 import yaml
@@ -78,14 +78,9 @@ class PostgresVectorStore(VectorStore):
 
         # Connect to the database
         try:
-
-            self.connection = psycopg.connect(
-                host=host,
-                port=port,
-                database=database,
-                user=username,
-                password=password
-)
+            #prepare connection string
+            conn_string = f"host={host} port={port} dbname={database} user={username} password={password}"
+            self.connection = psycopg2.connect(conn_string)
             self.cursor = self.connection.cursor()
             
             # Initialize pgvector extension if not exists
