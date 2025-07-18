@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 
 
 
-embeddings = OllamaEmbeddings(model="llama3")
+embeddings = OllamaEmbeddings(model="llama3.3")
 
 # See docker command above to launch a postgres instance with pgvector enabled.
 connection = "postgresql+psycopg://langchain:langchain@localhost:6024/langchain"  # Uses psycopg3!
