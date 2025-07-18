@@ -66,7 +66,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         # Initialize default embedding model if none provided
         if embedding_function is None:
             # Create a default embedding model
-            model = SentenceTransformer('all-MiniLM-L6-v2')
+            model = SentenceTransformer('all-MiniLM-L12-v2')
             self._embedding_function = model.encode
         else:
             self._embedding_function = embedding_function
@@ -137,6 +137,117 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         """
         raise NotImplementedError("add_texts method must be implemented...")
 
+    def add_pdf_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
+        """Add chunks from a PDF document to the vector store"""
+        if not chunks:
+            return
+        
+        # Prepare data for Oracle DB
+        texts = [chunk["text"] for chunk in chunks]
+        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
+        ids = [f"{document_id}_{i}" for i in range(len(chunks))]
+
+        # Encode all texts in a batch
+        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
+
+        table_name = "PDFCollection"
+        # Truncate the table
+        self.cursor.execute(f"truncate table {table_name}")
+
+        # Insert embeddings into Oracle
+        for i, (docid, text, metadata, embedding) in enumerate(zip(ids, texts, metadatas, embeddings), start=1):
+            json_metadata = json.dumps(metadata)  # Convert to JSON string
+            vector = array.array("f", embedding)
+
+            self.cursor.execute(
+                "INSERT INTO PDFCollection (id, text, metadata, embedding) VALUES (:1, :2, :3, :4)",
+                (docid, text, json_metadata, vector)
+            )
+
+        self.connection.commit()
+    
+    def add_web_chunks(self, chunks: List[Dict[str, Any]], source_id: str):
+        """Add chunks from web content to the vector store"""
+        if not chunks:
+            return
+        
+        # Prepare data for Oracle DB
+        texts = [chunk["text"] for chunk in chunks]
+        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
+        ids = [f"{source_id}_{i}" for i in range(len(chunks))]
+
+        # Encode all texts in a batch
+        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
+
+        table_name = "WebCollection"
+        # No truncation for web chunks, just append new ones
+
+        # Insert embeddings into Oracle
+        for i, (docid, text, metadata, embedding) in enumerate(zip(ids, texts, metadatas, embeddings), start=1):
+            json_metadata = json.dumps(metadata)  # Convert to JSON string
+            vector = array.array("f", embedding)
+
+            self.cursor.execute(
+                "INSERT INTO WebCollection (id, text, metadata, embedding) VALUES (:1, :2, :3, :4)",
+                (docid, text, json_metadata, vector)
+            )
+
+        self.connection.commit()
+    
+    def add_general_knowledge(self, chunks: List[Dict[str, Any]], source_id: str):
+        """Add general knowledge chunks to the vector store"""
+        if not chunks:
+            return
+        
+        # Prepare data for Oracle DB
+        texts = [chunk["text"] for chunk in chunks]
+        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
+        ids = [f"{source_id}_{i}" for i in range(len(chunks))]
+        
+        # Encode all texts in a batch
+        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
+
+        table_name = "GeneralCollection"
+        
+        # Insert embeddings into Oracle
+        for i, (docid, text, metadata, embedding) in enumerate(zip(ids, texts, metadatas, embeddings), start=1):
+            json_metadata = json.dumps(metadata)  # Convert to JSON string
+            vector = array.array("f", embedding)
+
+            self.cursor.execute(
+                "INSERT INTO GeneralCollection (id, text, metadata, embedding) VALUES (:1, :2, :3, :4)",
+                (docid, text, json_metadata, vector)
+            )
+
+        self.connection.commit()
+    
+    def add_repo_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
+        """Add chunks from a repository to the vector store"""
+        if not chunks:
+            return
+        
+        # Prepare data for Oracle DB
+        texts = [chunk["text"] for chunk in chunks]
+        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
+        ids = [f"{document_id}_{i}" for i in range(len(chunks))]
+        
+        # Encode all texts in a batch
+        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
+
+        table_name = "RepoCollection"
+
+        # Insert embeddings into Oracle
+        for i, (docid, text, metadata, embedding) in enumerate(zip(ids, texts, metadatas, embeddings), start=1):
+            json_metadata = json.dumps(metadata)  # Convert to JSON string
+            vector = array.array("f", embedding)
+
+            self.cursor.execute(
+                "INSERT INTO RepoCollection (id, text, metadata, embedding) VALUES (:1, :2, :3, :4)",
+                (docid, text, json_metadata, vector)
+            )
+
+        self.connection.commit()
+    
     def get_collection_count(self, collection_name: str) -> int:
         """Get the total number of chunks in a collection
         
@@ -214,7 +325,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
             SELECT Id, Text, MetaData, Embedding
             FROM PDFCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
-            FETCH FIRST 10 ROWS ONLY
+            FETCH FIRST {n_results} ROWS ONLY
             """
 
         self.cursor.execute(sql, {"nv": new_vector})
@@ -245,7 +356,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
             SELECT Id, Text, MetaData, Embedding
             FROM WebCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
-            FETCH FIRST 10 ROWS ONLY
+            FETCH FIRST {n_results} ROWS ONLY
             """
 
         self.cursor.execute(sql, {"nv": new_vector})
@@ -276,7 +387,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
             SELECT Id, Text, MetaData, Embedding
             FROM GeneralCollection
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
-            FETCH FIRST 10 ROWS ONLY
+            FETCH FIRST {n_results} ROWS ONLY
             """
 
         self.cursor.execute(sql, {"nv": new_vector})
@@ -307,7 +418,7 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
             SELECT Id, Text, MetaData, Embedding
             FROM RepoCOLLECTION
             ORDER BY VECTOR_DISTANCE(EMBEDDING, :nv, EUCLIDEAN) 
-            FETCH FIRST 10 ROWS ONLY
+            FETCH FIRST {n_results} ROWS ONLY
             """
 
         self.cursor.execute(sql, {"nv": new_vector})
