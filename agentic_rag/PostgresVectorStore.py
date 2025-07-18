@@ -79,8 +79,8 @@ class PostgresVectorStore(VectorStore):
         # Connect to the database
         try:
             #prepare connection string
-            conn_string = f"host={host} port={port} dbname={database} user={username} password={password}"
-            
+            conn_string = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"  # Uses psycopg3!
+
             vector_store = PGVector(
                         embeddings=self._embedding_function,
                         collection_name=collection_name,
