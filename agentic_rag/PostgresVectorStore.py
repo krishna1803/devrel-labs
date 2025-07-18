@@ -18,9 +18,10 @@ from typing import (
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
+from langchain_postgres import PGVector
 
-import psycopg2
-from psycopg2.extras import Json
+import psycopg
+from psycopg.extras import Json
 import argparse
 from pathlib import Path
 import yaml
@@ -63,44 +64,43 @@ class PostgresVectorStore(VectorStore):
         self.encoder = SentenceTransformer('all-MiniLM-L12-v2')
         self.override_relevance_score_fn = relevance_score_fn
         
-        # Load Postgres DB credentials from config.yaml
+        # Load Postgres DB credentials from config_pg.yaml
         credentials = self._load_config()
         
         host = credentials.get("PG_HOST", "localhost")
-        port = credentials.get("PG_PORT", 5432)
-        database = credentials.get("PG_DATABASE", "vectordb")
-        username = credentials.get("PG_USERNAME", "postgres")
-        password = credentials.get("PG_PASSWORD", "")
-        
+        port = int(credentials.get("PG_PORT", "5432"))
+        database = credentials.get("PG_DATABASE", "langchain")
+        username = credentials.get("PG_USERNAME", "langchain")
+        password = credentials.get("PG_PASSWORD", "langchain")
+
         if not host or not password:
-            raise ValueError("PostgreSQL credentials not found in config.yaml. Please set PG_HOST, PG_PORT, PG_DATABASE, PG_USERNAME, and PG_PASSWORD.")
+            raise ValueError("PostgreSQL credentials not found in config_pg.yaml. Please set PG_HOST, PG_PORT, PG_DATABASE, PG_USERNAME, and PG_PASSWORD.")
 
         # Connect to the database
         try:
-            self.connection = psycopg2.connect(
+
+            self.connection = psycopg.connect(
                 host=host,
                 port=port,
                 database=database,
                 user=username,
                 password=password
-            )
+)
             self.cursor = self.connection.cursor()
             
             # Initialize pgvector extension if not exists
             self._initialize_pgvector()
-            
-            # Create tables if they don't exist
             self._create_tables()
-            
+            logging.info("PostgreSQL Connection successful!")
             print("PostgreSQL Connection successful!")
         except Exception as e:
             print("PostgreSQL Connection failed!", e)
             raise
 
     def _load_config(self) -> Dict[str, str]:
-        """Load configuration from config.yaml"""
+        """Load configuration from config_pg.yaml"""
         try:
-            config_path = Path("config.yaml")
+            config_path = Path("config_pg.yaml")
             if not config_path.exists():
                 print("Warning: config.yaml not found. Using empty configuration.")
                 return {}

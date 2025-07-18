@@ -2,7 +2,9 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
 from langchain_core.documents import Document
 
-
+# For running this code, you need to have a PostgreSQL instance running with pgvector enabled.
+# Use the following command to start a PostgreSQL instance with pgvector:
+#sudo docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
 
 embeddings = OllamaEmbeddings(model="llama3.3")
 
