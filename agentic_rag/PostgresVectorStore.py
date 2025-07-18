@@ -21,7 +21,7 @@ from langchain_core.vectorstores import VectorStore
 from langchain_postgres import PGVector
 
 import psycopg
-from psycopg.extras import Json
+#from psycopg.extras import Json
 import argparse
 from pathlib import Path
 import yaml
