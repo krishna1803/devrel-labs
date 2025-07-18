@@ -499,3 +499,47 @@ class OracleDBVectorStore(VectorStore): # inherits from langchain_core.vectorsto
         logging.info(f"from_texts")
         """Return VectorStore initialized from texts and embeddings."""
         raise NotImplementedError("from_texts method must be implemented...")
+def main():
+    parser = argparse.ArgumentParser(description="Manage Oracle DB vector store")
+    parser.add_argument("--add", help="JSON file containing chunks to add")
+    parser.add_argument("--add-web", help="JSON file containing web chunks to add")
+    parser.add_argument("--query", help="Query to search for")
+    
+    args = parser.parse_args()
+    store = OracleDBVectorStore()
+
+    if args.add:
+        with open(args.add, 'r', encoding='utf-8') as f:
+            chunks = json.load(f)
+        store.add_pdf_chunks(chunks, document_id=args.add)
+        print(f"✓ Added {len(chunks)} PDF chunks to Postgres vector store")
+    
+    if args.add_web:
+        with open(args.add_web, 'r', encoding='utf-8') as f:
+            chunks = json.load(f)
+        store.add_web_chunks(chunks, source_id=args.add_web)
+        print(f"✓ Added {len(chunks)} web chunks to Postgres vector store")
+    
+    if args.query:
+        # Query both collections
+        pdf_results = store.query_pdf_collection(args.query)
+        web_results = store.query_web_collection(args.query)
+        
+        print("\nPDF Results:")
+        print("-" * 50)
+        for result in pdf_results:
+            print(f"Content: {result['content'][:200]}...")
+            print(f"Source: {result['metadata'].get('source', 'Unknown')}")
+            print(f"Pages: {result['metadata'].get('page_numbers', [])}")
+            print("-" * 50)
+        
+        print("\nWeb Results:")
+        print("-" * 50)
+        for result in web_results:
+            print(f"Content: {result['content'][:200]}...")
+            print(f"Source: {result['metadata'].get('source', 'Unknown')}")
+            print(f"Title: {result['metadata'].get('title', 'Unknown')}")
+            print("-" * 50)
+
+if __name__ == "__main__":
+    main()     
