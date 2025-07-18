@@ -1,6 +1,7 @@
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
 from langchain_core.documents import Document
+from sqlalchemy import text
 
 # For running this code, you need to have a PostgreSQL instance running with pgvector enabled.
 # Use the following command to start a PostgreSQL instance with pgvector:
@@ -68,7 +69,27 @@ def add_docs():
     vector_store.add_documents(docs, ids=[doc.metadata["id"] for doc in docs])
     print("Documents added successfully!")
 
-
+# Add this function to your file
+def execute_raw_sql(query, params=None):
+    """Execute raw SQL queries against the PostgreSQL database
+    
+    Args:
+        query: SQL query string
+        params: Optional parameters for the query
+        
+    Returns:
+        List of dictionaries containing the query results
+    """
+    # Option 1: Using SQLAlchemy engine from PGVector
+    engine = vector_store.client.engine
+    with engine.connect() as conn:
+        result = conn.execute(text(query), params or {})
+        column_names = result.keys()
+        rows = result.fetchall()
+        
+        # Convert to list of dictionaries
+        return [dict(zip(column_names, row)) for row in rows]
+    
 #Function to implement similarity search
 def similarity_search(query, k=3):
     results = vector_store.similarity_search(query, k=k)
@@ -96,6 +117,38 @@ def main():
     query = "What animals are found in the pond?"
     similarity_search(query)
     similarity_search_with_retriever(query)
+    
+    # Example 1: Query all tables in the database
+    print("\n--- All Tables in Database ---")
+    tables = execute_raw_sql("""
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+    """)
+    for table in tables:
+        print(f"Table: {table['table_name']}")
+    
+    # Example 2: Examine the pgvector collection table schema
+    print("\n--- Collection Table Schema ---")
+    schema = execute_raw_sql("""
+        SELECT column_name, data_type 
+        FROM information_schema.columns
+        WHERE table_name = %s
+    """, [collection_name])
+    for column in schema:
+        print(f"{column['column_name']}: {column['data_type']}")
+    
+    # Example 3: Custom query with filters
+    print("\n--- Custom Query: Documents about animals ---")
+    animal_docs = execute_raw_sql("""
+        SELECT document, metadata
+        FROM my_docs
+        WHERE metadata->>'topic' = %s
+    """, ["animals"])
+    for doc in animal_docs:
+        print(f"Document: {doc['document']}")
+        print(f"Metadata: {doc['metadata']}")
+        print("-" * 40)
         
         
 if __name__ == "__main__":
