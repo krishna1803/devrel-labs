@@ -20,7 +20,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_postgres import PGVector
 
-import psycopg2
+#import psycopg2
 #from psycopg2.extras import Json
 import argparse
 from pathlib import Path
@@ -80,16 +80,19 @@ class PostgresVectorStore(VectorStore):
         try:
             #prepare connection string
             conn_string = f"host={host} port={port} dbname={database} user={username} password={password}"
-            self.connection = psycopg2.connect(conn_string)
-            self.cursor = self.connection.cursor()
             
-            # Initialize pgvector extension if not exists
-            self._initialize_pgvector()
-            self._create_tables()
-            logging.info("PostgreSQL Connection successful!")
-            print("PostgreSQL Connection successful!")
+            vector_store = PGVector(
+                        embeddings=self._embedding_function,
+                        collection_name=collection_name,
+                        connection=conn_string,
+                        use_jsonb=True,
+            ) 
+            self.connection = vector_store
+
+            logging.info("PostgreSQL Collection Creation successful!")
+            print("PostgreSQL Collection Creation successful!")
         except Exception as e:
-            print("PostgreSQL Connection failed!", e)
+            print("PostgreSQL Collection Creation failed!", e)
             raise
 
     def _load_config(self) -> Dict[str, str]:
@@ -107,69 +110,23 @@ class PostgresVectorStore(VectorStore):
             print(f"Warning: Error loading config: {str(e)}")
             return {}
             
-    def _initialize_pgvector(self):
-        """Initialize pgvector extension in PostgreSQL"""
-        try:
-            self.cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            self.connection.commit()
-        except Exception as e:
-            print(f"Error initializing pgvector extension: {str(e)}")
-            raise
+    def _sanitize_metadata(self, metadata: Dict) -> Dict:
+        """Sanitize metadata to ensure all values are valid types for Oracle DB"""
+        sanitized = {}
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float, bool)):
+                sanitized[key] = value
+            elif isinstance(value, list):
+                # Convert list to string representation
+                sanitized[key] = str(value)
+            elif value is None:
+                # Replace None with empty string
+                sanitized[key] = ""
+            else:
+                # Convert any other type to string
+                sanitized[key] = str(value)
+        return sanitized
             
-    def _create_tables(self):
-        """Create vector tables if they don't exist"""
-        embedding_dim = 384  # Dimension for all-MiniLM-L12-v2
-        
-        # Define the table creation queries
-        tables = {
-            "PDFCollection": f"""
-                CREATE TABLE IF NOT EXISTS PDFCollection (
-                    id TEXT PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    metadata JSONB,
-                    embedding vector({embedding_dim})
-                )
-            """,
-            "WebCollection": f"""
-                CREATE TABLE IF NOT EXISTS WebCollection (
-                    id TEXT PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    metadata JSONB,
-                    embedding vector({embedding_dim})
-                )
-            """,
-            "RepoCollection": f"""
-                CREATE TABLE IF NOT EXISTS RepoCollection (
-                    id TEXT PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    metadata JSONB,
-                    embedding vector({embedding_dim})
-                )
-            """,
-            "GeneralCollection": f"""
-                CREATE TABLE IF NOT EXISTS GeneralCollection (
-                    id TEXT PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    metadata JSONB,
-                    embedding vector({embedding_dim})
-                )
-            """
-        }
-        
-        # Create each table
-        for table_name, create_query in tables.items():
-            try:
-                self.cursor.execute(create_query)
-                
-                # Create index on the embedding column for faster similarity search
-                index_query = f"CREATE INDEX IF NOT EXISTS {table_name}_embedding_idx ON {table_name} USING ivfflat (embedding vector_l2_ops)"
-                self.cursor.execute(index_query)
-                
-                self.connection.commit()
-            except Exception as e:
-                print(f"Error creating table {table_name}: {str(e)}")
-                self.connection.rollback()
-    
     def add_texts(
         self,
         texts: Iterable[str],
@@ -198,293 +155,24 @@ class PostgresVectorStore(VectorStore):
         if not chunks:
             return
         
-        # Prepare data for Postgres
-        texts = [chunk["text"] for chunk in chunks]
-        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
-        ids = [f"{document_id}_{i}" for i in range(len(chunks))]
-
-        # Encode all texts in a batch
-        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
-
-        table_name = "PDFCollection"
-        # Truncate the table - keeping this behavior from original implementation
-        self.cursor.execute(f"TRUNCATE TABLE {table_name}")
-
-        # Insert embeddings into Postgres
-        for docid, text, metadata, embedding in zip(ids, texts, metadatas, embeddings):
-            json_metadata = json.dumps(metadata)  # Convert to JSON string
-            
-            self.cursor.execute(
-                "INSERT INTO PDFCollection (id, text, metadata, embedding) VALUES (%s, %s, %s, %s)",
-                (docid, text, json_metadata, embedding.tolist())
-            )
-
-        self.connection.commit()
-    
-    def add_web_chunks(self, chunks: List[Dict[str, Any]], source_id: str):
-        """Add chunks from web content to the vector store"""
-        if not chunks:
-            return
-        
-        # Prepare data for Postgres
-        texts = [chunk["text"] for chunk in chunks]
-        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
-        ids = [f"{source_id}_{i}" for i in range(len(chunks))]
-
-        # Encode all texts in a batch
-        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
-
-        table_name = "WebCollection"
-        # No truncation for web chunks, just append new ones
-
-        # Insert embeddings into Postgres
-        for docid, text, metadata, embedding in zip(ids, texts, metadatas, embeddings):
-            json_metadata = json.dumps(metadata)  # Convert to JSON string
-            
-            self.cursor.execute(
-                "INSERT INTO WebCollection (id, text, metadata, embedding) VALUES (%s, %s, %s, %s)",
-                (docid, text, json_metadata, embedding.tolist())
-            )
-
-        self.connection.commit()
-    
-    def add_general_knowledge(self, chunks: List[Dict[str, Any]], source_id: str):
-        """Add general knowledge chunks to the vector store"""
-        if not chunks:
-            return
-        
-        # Prepare data for Postgres
-        texts = [chunk["text"] for chunk in chunks]
-        metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
-        ids = [f"{source_id}_{i}" for i in range(len(chunks))]
-        
-        # Encode all texts in a batch
-        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
-
-        table_name = "GeneralCollection"
-        
-        # Insert embeddings into Postgres
-        for docid, text, metadata, embedding in zip(ids, texts, metadatas, embeddings):
-            json_metadata = json.dumps(metadata)  # Convert to JSON string
-            
-            self.cursor.execute(
-                "INSERT INTO GeneralCollection (id, text, metadata, embedding) VALUES (%s, %s, %s, %s)",
-                (docid, text, json_metadata, embedding.tolist())
-            )
-
-        self.connection.commit()
-    
-    def add_repo_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
-        """Add chunks from a repository to the vector store"""
-        if not chunks:
-            return
-        
-        # Prepare data for Postgres
+        # Prepare data for Oracle DB
         texts = [chunk["text"] for chunk in chunks]
         metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
         ids = [f"{document_id}_{i}" for i in range(len(chunks))]
         
-        # Encode all texts in a batch
-        embeddings = self.encoder.encode(texts, batch_size=32, show_progress_bar=True)
+        #Create a list of Document onjects with content and metadata
+        documents = [
+            Document(
+                page_content=chunk["text"],
+                metadata=self._sanitize_metadata(chunk["metadata"])
+            ) for chunk in chunks
+        ]
 
-        table_name = "RepoCollection"
-
-        # Insert embeddings into Postgres
-        for docid, text, metadata, embedding in zip(ids, texts, metadatas, embeddings):
-            json_metadata = json.dumps(metadata)  # Convert to JSON string
-            
-            self.cursor.execute(
-                "INSERT INTO RepoCollection (id, text, metadata, embedding) VALUES (%s, %s, %s, %s)",
-                (docid, text, json_metadata, embedding.tolist())
-            )
-
-        self.connection.commit()
-    
-    def get_collection_count(self, collection_name: str) -> int:
-        """Get the total number of chunks in a collection
-        
-        Args:
-            collection_name: Name of the collection (pdf_documents, web_documents, repository_documents, general_knowledge)
-            
-        Returns:
-            Number of chunks in the collection
-        """
-        # Map collection names to table names
-        collection_map = {
-            "pdf_documents": "PDFCollection",
-            "web_documents": "WebCollection",
-            "repository_documents": "RepoCollection", 
-            "general_knowledge": "GeneralCollection"
-        }
-        
-        table_name = collection_map.get(collection_name)
-        if not table_name:
-            raise ValueError(f"Unknown collection name: {collection_name}")
-        
-        # Count the rows in the table
-        sql = f"SELECT COUNT(*) FROM {table_name}"
-        self.cursor.execute(sql)
-        count = self.cursor.fetchone()[0]
-        
-        return count
-    
-    def get_latest_chunk(self, collection_name: str) -> Dict[str, Any]:
-        """Get the most recently inserted chunk from a collection
-        
-        Args:
-            collection_name: Name of the collection (pdf_documents, web_documents, repository_documents, general_knowledge)
-            
-        Returns:
-            Dictionary containing the content and metadata of the latest chunk
-        """
-        # Map collection names to table names
-        collection_map = {
-            "pdf_documents": "PDFCollection",
-            "web_documents": "WebCollection",
-            "repository_documents": "RepoCollection", 
-            "general_knowledge": "GeneralCollection"
-        }
-        
-        table_name = collection_map.get(collection_name)
-        if not table_name:
-            raise ValueError(f"Unknown collection name: {collection_name}")
-        
-        # Get the most recently inserted row (using CTID as a proxy for insertion order in PostgreSQL)
-        sql = f"SELECT id, text, metadata FROM {table_name} ORDER BY ctid DESC LIMIT 1"
-        self.cursor.execute(sql)
-        row = self.cursor.fetchone()
-        
-        if not row:
-            raise ValueError(f"No chunks found in collection: {collection_name}")
-        
-        result = {
-            "id": row[0],
-            "content": row[1],
-            "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-        }
-        
-        return result
-    
-    def query_pdf_collection(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
-        """Query the PDF documents collection"""
-        print("🔍 [PostgreSQL] Querying PDF Collection")
-        # Generate Embeddings
-        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
-
-        sql = f"""
-            SELECT id, text, metadata
-            FROM PDFCollection
-            ORDER BY embedding <-> %s
-            LIMIT %s
-            """
-
-        self.cursor.execute(sql, (embeddings.tolist(), n_results))
-
-        # Fetch all rows
-        rows = self.cursor.fetchall()
-        
-        # Format results
-        formatted_results = []
-        for row in rows:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-        
-        print(f"🔍 [PostgreSQL] Retrieved {len(formatted_results)} chunks from PDF Collection")
-        return formatted_results
-    
-    def query_web_collection(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
-        """Query the web documents collection"""
-        print("🔍 [PostgreSQL] Querying Web Collection")
-        # Generate Embeddings
-        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
-
-        sql = f"""
-            SELECT id, text, metadata
-            FROM WebCollection
-            ORDER BY embedding <-> %s
-            LIMIT %s
-            """
-
-        self.cursor.execute(sql, (embeddings.tolist(), n_results))
-
-        # Fetch all rows
-        rows = self.cursor.fetchall()
-
-        # Format results
-        formatted_results = []
-        for row in rows:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-        
-        print(f"🔍 [PostgreSQL] Retrieved {len(formatted_results)} chunks from Web Collection")
-        return formatted_results
-    
-    def query_general_collection(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
-        """Query the general knowledge collection"""
-        print("🔍 [PostgreSQL] Querying General Knowledge Collection")
-        # Generate Embeddings
-        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
-
-        sql = f"""
-            SELECT id, text, metadata
-            FROM GeneralCollection
-            ORDER BY embedding <-> %s
-            LIMIT %s
-            """
-
-        self.cursor.execute(sql, (embeddings.tolist(), n_results))
-
-        # Fetch all rows
-        rows = self.cursor.fetchall()
-
-        # Format results
-        formatted_results = []
-        for row in rows:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-        
-        print(f"🔍 [PostgreSQL] Retrieved {len(formatted_results)} chunks from General Knowledge Collection")
-        return formatted_results
-    
-    def query_repo_collection(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
-        """Query the repository documents collection"""
-        print("🔍 [PostgreSQL] Querying Repository Collection")
-        # Generate Embeddings
-        embeddings = self.encoder.encode(query, batch_size=32, show_progress_bar=True)
-
-        sql = f"""
-            SELECT id, text, metadata
-            FROM RepoCollection
-            ORDER BY embedding <-> %s
-            LIMIT %s
-            """
-
-        self.cursor.execute(sql, (embeddings.tolist(), n_results))
-
-        # Fetch all rows
-        rows = self.cursor.fetchall()
-        
-        # Format results
-        formatted_results = []
-        for row in rows:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-        
-        print(f"🔍 [PostgreSQL] Retrieved {len(formatted_results)} chunks from Repository Collection")
-        return formatted_results
-        
+        # Add documents to the vector store
+        self.add_documents(documents)
+        logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")   
+        print(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
+           
     @property
     def embeddings(self) -> Optional[Embeddings]:
         return self._embedding_function
@@ -492,39 +180,24 @@ class PostgresVectorStore(VectorStore):
     def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
     ) -> List[Dict[str, Any]]:
-        """Return docs most similar to query."""
-        logging.info(f"Similarity Search")
-
-        if self.verbose:
-            logging.info(f"top_k: {k}")
-            logging.info("")
-
-        # Embed the query
-        embed_query = self._embedding_function(query)
-
-        sql = f"""
-            SELECT id, text, metadata
-            FROM PDFCollection
-            ORDER BY embedding <-> %s
-            LIMIT %s
-            """
-
-        self.cursor.execute(sql, (embed_query.tolist(), k))
-
-        # Fetch all rows
-        rows = self.cursor.fetchall()
-        
-        # Format results
-        formatted_results = []
-        for row in rows:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-        
-        print(f"🔍 [PostgreSQL] Retrieved {len(formatted_results)} chunks from PDF Collection")
-        return formatted_results
+        results = self.connection.similarity_search(query, k=k)
+        print(f"Found {len(results)} results for query '{query}':")
+        for i, result in enumerate(results):
+            print(f"\nResult {i+1}:")
+            print(f"Content: {result.page_content}")
+            print(f"Metadata: {result.metadata}")
+        return results
+    
+    #Function to imlement similarity search with a retriever
+    def similarity_search_with_retriever(self,query:str, k=3):
+        retriever = self.connection.as_retriever(search_type="similarity", search_kwargs={"k": k})
+        results = retriever.invoke(query)
+        print(f"Found {len(results)} results for query '{query}':")
+        for i, result in enumerate(results):
+            print(f"\nResult {i+1}:")
+            print(f"Content: {result.page_content}")
+            print(f"Metadata: {result.metadata}")
+        return results
     
     def as_retriever(self):
         """Return a retriever that uses this vector store for semantic search."""
@@ -551,7 +224,6 @@ class PostgresVectorStore(VectorStore):
 def main():
     parser = argparse.ArgumentParser(description="Manage Oracle DB vector store")
     parser.add_argument("--add", help="JSON file containing chunks to add")
-    parser.add_argument("--add-web", help="JSON file containing web chunks to add")
     parser.add_argument("--query", help="Query to search for")
     
     args = parser.parse_args()
@@ -562,33 +234,6 @@ def main():
             chunks = json.load(f)
         store.add_pdf_chunks(chunks, document_id=args.add)
         print(f"✓ Added {len(chunks)} PDF chunks to Postgres vector store")
-    
-    if args.add_web:
-        with open(args.add_web, 'r', encoding='utf-8') as f:
-            chunks = json.load(f)
-        store.add_web_chunks(chunks, source_id=args.add_web)
-        print(f"✓ Added {len(chunks)} web chunks to Postgres vector store")
-    
-    if args.query:
-        # Query both collections
-        pdf_results = store.query_pdf_collection(args.query)
-        web_results = store.query_web_collection(args.query)
-        
-        print("\nPDF Results:")
-        print("-" * 50)
-        for result in pdf_results:
-            print(f"Content: {result['content'][:200]}...")
-            print(f"Source: {result['metadata'].get('source', 'Unknown')}")
-            print(f"Pages: {result['metadata'].get('page_numbers', [])}")
-            print("-" * 50)
-        
-        print("\nWeb Results:")
-        print("-" * 50)
-        for result in web_results:
-            print(f"Content: {result['content'][:200]}...")
-            print(f"Source: {result['metadata'].get('source', 'Unknown')}")
-            print(f"Title: {result['metadata'].get('title', 'Unknown')}")
-            print("-" * 50)
 
 if __name__ == "__main__":
     main()     
