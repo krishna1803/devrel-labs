@@ -229,6 +229,16 @@ def main():
             chunks = json.load(f)
         store.add_pdf_chunks(chunks, document_id=args.add)
         print(f"✓ Added {len(chunks)} PDF chunks to Postgres vector store")
-
+    elif args.query:
+        results = store.similarity_search(args.query)
+        if results:
+            print(f"✓ Found {len(results)} results for query '{args.query}'")
+            for i, result in enumerate(results):
+                print(f"\nResult {i+1}:")
+                print(f"Content: {result.page_content}")
+                print(f"Metadata: {result.metadata}")
+        else:
+            print("No results found.")
+        
 if __name__ == "__main__":
     main()
