@@ -399,12 +399,12 @@ def main():
                 exit(1)
             
             # Initialize Oracle DB Vector Store
-            store = OracleDBVectorStore(store_path=args.store_path, collection_name=args.collection, use_stream=args.use_stream)
+            store = OracleDBVectorStore(collection_name=args.collection)
         else:
             # Initialize Postgres Vector Store (assuming similar interface)
             from PostgresVectorStore import PostgresVectorStore
             print("Using Postgres Vector Store")
-            store = PostgresVectorStore(store_path=args.store_path, collection_name=args.collection, use_stream=args.use_stream)
+            store = PostgresVectorStore(collection_name=args.collection)
         if not store:
             print("✗ Error: Failed to initialize vector store")
             exit(1)
