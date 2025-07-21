@@ -51,17 +51,10 @@ class PostgresVectorStore(VectorStore):
         cursor: Optional[Any] = None,
     ) -> None:
         self.verbose = verbose
-        
-        # Initialize default embedding model if none provided
-        if embedding_function is None:
-            # Create a default embedding model
-            model = SentenceTransformer('all-MiniLM-L12-v2')
-            self._embedding_function = model.encode
-        else:
-            self._embedding_function = embedding_function
+    
 
         self.collection_name = collection_name
-        self.encoder = SentenceTransformer('all-MiniLM-L12-v2')
+        self.embedding_function = SentenceTransformer('all-MiniLM-L12-v2')
         self.override_relevance_score_fn = relevance_score_fn
         
         # Load Postgres DB credentials from config_pg.yaml
@@ -82,7 +75,7 @@ class PostgresVectorStore(VectorStore):
             conn_string = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"  # Uses psycopg3!
 
             vector_store = PGVector(
-                        embeddings=self._embedding_function,
+                        embeddings=self.embedding_function,
                         collection_name=collection_name,
                         connection=conn_string,
                         use_jsonb=True,
@@ -173,7 +166,7 @@ class PostgresVectorStore(VectorStore):
            
     @property
     def embeddings(self) -> Optional[Embeddings]:
-        return self._embedding_function
+        return self.embedding_function
 
     def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
