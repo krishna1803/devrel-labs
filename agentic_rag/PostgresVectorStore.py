@@ -160,6 +160,8 @@ class PostgresVectorStore(VectorStore):
         #Create Document Objects using texts and metadatas
         documents = [Document(page_content=text, metadata=metadata) for text, metadata in zip(texts, metadatas)]
         # Add documents to the vector store
+        print("Adding documents to Postgres vector store...")
+        print(f"Total documents to add: {len(documents)}")
         self.vectorstore.add_documents(documents, ids=ids)
         logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
         print(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
@@ -167,6 +169,7 @@ class PostgresVectorStore(VectorStore):
            
     @property
     def embeddings(self) -> Optional[Embeddings]:
+        print("Getting embeddings from Postgres vector store...")
         return self._embedding_function
 
     def similarity_search(
