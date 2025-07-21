@@ -152,24 +152,19 @@ class PostgresVectorStore(VectorStore):
         logging.info(f"Added {len(texts)} texts to Postgres vector store")
         print(f"Added {len(texts)} texts to Postgres vector store")
         return ids                    
-
-    def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """Sanitize metadata to ensure it can be serialized to JSON"""
-        # Implement metadata sanitization if needed
-        return metadata
         
     def add_pdf_chunks(self, chunks: List[Dict[str, Any]], document_id: str):
         """Add chunks from a PDF document to the vector store"""
         if not chunks:
             return
         
-        # Prepare data for Postgres DB (fixed the comment from 'Oracle DB')
+        # Prepare data for Postgres DB
         texts = [chunk["text"] for chunk in chunks]
         metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
         ids = [f"{document_id}_{i}" for i in range(len(chunks))]
         
-        # Use the connection directly instead of non-existent method
-        self.connection.add_texts(texts, metadatas, ids=ids)
+        # Use the connection directly
+        self.connection.add_texts(texts, metadatas=metadatas, ids=ids)
         
         logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")   
         print(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
