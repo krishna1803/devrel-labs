@@ -27,7 +27,8 @@ from pathlib import Path
 import yaml
 import json
 
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer
+from langchain_ollama import OllamaEmbeddings
 
 # Configure logging
 logging.basicConfig(
@@ -54,7 +55,7 @@ class PostgresVectorStore(VectorStore):
     
 
         self.collection_name = collection_name
-        self._embedding_function = SentenceTransformer('all-MiniLM-L12-v2')
+        self._embedding_function = OllamaEmbeddings(model="llama3.3")
         self.override_relevance_score_fn = relevance_score_fn
         
         # Load Postgres DB credentials from config_pg.yaml
