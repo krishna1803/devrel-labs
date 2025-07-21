@@ -239,6 +239,16 @@ def main():
                 print(f"Metadata: {result.metadata}")
         else:
             print("No results found.")
+        #Try with retriever
+        retriever_results = store.similarity_search_with_retriever(args.query)
+        if retriever_results:
+            print(f"✓ Found {len(retriever_results)} results for query '{args.query}' using retriever")
+            for i, result in enumerate(retriever_results):
+                print(f"\nResult {i+1}:")
+                print(f"Content: {result.page_content}")
+                print(f"Metadata: {result.metadata}")
+        else:
+            print("No results found using retriever.")    
         
 if __name__ == "__main__":
     main()
