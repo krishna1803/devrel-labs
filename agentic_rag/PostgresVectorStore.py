@@ -47,7 +47,7 @@ class PostgresVectorStore(VectorStore):
         client: Optional[Any] = None,
         relevance_score_fn: Optional[Callable[[float], float]] = None,
         verbose: Optional[bool] = False,
-        connection: Optional[Any] = None,
+        vectorstore: Optional[Any] = None,
         cursor: Optional[Any] = None,
     ) -> None:
         self.verbose = verbose
@@ -87,7 +87,7 @@ class PostgresVectorStore(VectorStore):
                         connection=conn_string,
                         use_jsonb=True,
             ) 
-            self.connection = vector_store
+            self.vectorstore = vector_store
 
             logging.info("PostgreSQL Collection Creation successful!")
             print("PostgreSQL Collection Creation successful!")
@@ -163,11 +163,13 @@ class PostgresVectorStore(VectorStore):
         metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
         ids = [f"{document_id}_{i}" for i in range(len(chunks))]
         
-        # Use the connection directly
-        self.connection.add_texts(texts, metadatas=metadatas, ids=ids)
-        
-        logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")   
+        #Create Document Objects using texts and metadatas
+        documents = [Document(page_content=text, metadata=metadata) for text, metadata in zip(texts, metadatas)]
+        # Add documents to the vector store
+        self.vectorstore.add_documents(documents, ids=ids)
+        logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
         print(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
+        
            
     @property
     def embeddings(self) -> Optional[Embeddings]:
@@ -176,7 +178,7 @@ class PostgresVectorStore(VectorStore):
     def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
     ) -> List[Dict[str, Any]]:
-        results = self.connection.similarity_search(query, k=k)
+        results = self.vectorstore.similarity_search(query, k=k)
         print(f"Found {len(results)} results for query '{query}':")
         for i, result in enumerate(results):
             print(f"\nResult {i+1}:")
@@ -186,7 +188,7 @@ class PostgresVectorStore(VectorStore):
     
     #Function to imlement similarity search with a retriever
     def similarity_search_with_retriever(self,query:str, k=3):
-        retriever = self.connection.as_retriever(search_type="similarity", search_kwargs={"k": k})
+        retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k})
         results = retriever.invoke(query)
         print(f"Found {len(results)} results for query '{query}':")
         for i, result in enumerate(results):
