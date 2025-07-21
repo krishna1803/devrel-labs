@@ -144,16 +144,11 @@ class PostgresVectorStore(VectorStore):
         elif len(metadatas) != len(texts):
             raise ValueError("Length of metadatas must match length of texts")  
         metadatas = [self._sanitize_metadata(m) for m in metadatas]
-        ids = [f"text_{i}" for i in range(len(texts))]
-        # Create a list of Document objects with content and metadata
-        documents = [
-            Document(
-                page_content=text,
-                metadata=self._sanitize_metadata(metadata)
-            ) for text, metadata in zip(texts, metadatas)
-        ]   
-        # Add documents to the vector store
-        self.add_documents(documents)
+        ids = kwargs.get("ids", [f"text_{i}" for i in range(len(texts))])
+        
+        # Use the underlying connection (PGVector) to add texts directly
+        self.connection.add_texts(texts, metadatas, **kwargs)
+        
         logging.info(f"Added {len(texts)} texts to Postgres vector store")
         print(f"Added {len(texts)} texts to Postgres vector store")
         return ids                    
@@ -168,21 +163,14 @@ class PostgresVectorStore(VectorStore):
         if not chunks:
             return
         
-        # Prepare data for Oracle DB
+        # Prepare data for Postgres DB (fixed the comment from 'Oracle DB')
         texts = [chunk["text"] for chunk in chunks]
         metadatas = [self._sanitize_metadata(chunk["metadata"]) for chunk in chunks]
         ids = [f"{document_id}_{i}" for i in range(len(chunks))]
         
-        #Create a list of Document onjects with content and metadata
-        documents = [
-            Document(
-                page_content=chunk["text"],
-                metadata=self._sanitize_metadata(chunk["metadata"])
-            ) for chunk in chunks
-        ]
-
-        # Add documents to the vector store
-        self.add_documents(documents)
+        # Use the connection directly instead of non-existent method
+        self.connection.add_texts(texts, metadatas, ids=ids)
+        
         logging.info(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")   
         print(f"Added {len(chunks)} chunks from document {document_id} to Postgres vector store")
            
@@ -249,4 +237,4 @@ def main():
         print(f"✓ Added {len(chunks)} PDF chunks to Postgres vector store")
 
 if __name__ == "__main__":
-    main()     
+    main()
