@@ -53,7 +53,10 @@ class OCIRAGAgent:
                  model_id: str = "cohere.command-latest", compartment_id: str = None, use_stream:bool = False):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
-        self.retriever = vector_store.as_retriever()
+        if vector_store is OracleDBVectorStore:
+            self.retriever = vector_store.as_retriever()
+        else:
+            self.retriever = None
         self.use_cot = use_cot
         self.collection = collection
         self.model_id = model_id
