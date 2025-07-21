@@ -172,15 +172,46 @@ class PostgresVectorStore(VectorStore):
         print("Getting embeddings from Postgres vector store...")
         return self._embedding_function
 
-    def similarity_search(
-        self, query: str, k: int = 3, **kwargs: Any
-    ) -> List[Dict[str, Any]]:
-        results = self.vectorstore.similarity_search(query, k=k)
+    def query_pdf_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        """Query the PDF documents collection"""
+        print("🔍 [Postgres] Querying PDF Collection")
+        # Generate Embeddings
+        results = self.vectorstore.similarity_search(query, k=n_results)
+        if not results:
+            print("No results found for the query.")
+            return []
         print(f"Found {len(results)} results for query '{query}':")
         for i, result in enumerate(results):
             print(f"\nResult {i+1}:")
             print(f"Content: {result.page_content}")
             print(f"Metadata: {result.metadata}")
+        # Format results
+        formatted_results = []
+        for row in results:
+            result = {
+                "content": row[1],
+                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
+            }
+            formatted_results.append(result)
+
+        print(f"🔍 [Postgres] Retrieved {len(formatted_results)} chunks from PDF Collection")
+        return formatted_results
+    
+    def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        return self.vectorstore.similarity_search(query, k=n_results)
+     
+    def query_repo_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        return self.vectorstore.similarity_search(query, k=n_results)
+    
+    def query_web_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
+        return self.vectorstore.similarity_search(query, k=n_results)
+    
+     
+    def similarity_search(
+        self, query: str, k: int = 3, **kwargs: Any
+    ) -> List[Dict[str, Any]]:
+        results = self.vectorstore.similarity_search(query, k=k)
+        print(f"Found {len(results)} results for query '{query}':")
         return results
     
     #Function to imlement similarity search with a retriever
@@ -188,10 +219,6 @@ class PostgresVectorStore(VectorStore):
         retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k})
         results = retriever.invoke(query)
         print(f"Found {len(results)} results for query '{query}':")
-        for i, result in enumerate(results):
-            print(f"\nResult {i+1}:")
-            print(f"Content: {result.page_content}")
-            print(f"Metadata: {result.metadata}")
         return results
     
     def as_retriever(self):

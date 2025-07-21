@@ -375,6 +375,7 @@ def main():
     parser.add_argument("--compartment-id", help="OCI compartment ID")
     parser.add_argument("--verbose", action="store_true", help="Show full content of sources")
     parser.add_argument("--use-stream", action="store_true", help="Enable streaming responses from OCI Gen AI")
+    parser.add_argument("--vector-db", default="oracle", choices=["postgres", "oracle"], help="Type of vector database to use")
 
     args = parser.parse_args()
     
@@ -392,7 +393,21 @@ def main():
     print("=" * 50)
     
     try:
-        store = OracleDBVectorStore()
+        if args.vector_db == "oracle":
+            if not ORACLE_DB_AVAILABLE:
+                print("✗ Error: Oracle DB support is not available. Install with: pip install oracledb sentence-transformers")
+                exit(1)
+            
+            # Initialize Oracle DB Vector Store
+            store = OracleDBVectorStore(store_path=args.store_path, collection_name=args.collection, use_stream=args.use_stream)
+        else:
+            # Initialize Postgres Vector Store (assuming similar interface)
+            from PostgresVectorStore import PostgresVectorStore
+            print("Using Postgres Vector Store")
+            store = PostgresVectorStore(store_path=args.store_path, collection_name=args.collection, use_stream=args.use_stream)
+        if not store:
+            print("✗ Error: Failed to initialize vector store")
+            exit(1)
             
         agent = OCIRAGAgent(
             store,
