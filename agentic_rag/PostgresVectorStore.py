@@ -185,17 +185,9 @@ class PostgresVectorStore(VectorStore):
             print(f"\nResult {i+1}:")
             print(f"Content: {result.page_content}")
             print(f"Metadata: {result.metadata}")
-        # Format results
-        formatted_results = []
-        for row in results:
-            result = {
-                "content": row[1],
-                "metadata": json.loads(row[2]) if isinstance(row[2], str) else row[2]
-            }
-            formatted_results.append(result)
-
-        print(f"🔍 [Postgres] Retrieved {len(formatted_results)} chunks from PDF Collection")
-        return formatted_results
+        
+        print(f"🔍 [Postgres] Retrieved {len(results)} chunks from PDF Collection")
+        return results
     
     def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         return self.vectorstore.similarity_search(query, k=n_results)
@@ -215,7 +207,7 @@ class PostgresVectorStore(VectorStore):
         return results
     
     #Function to imlement similarity search with a retriever
-    def similarity_search_with_retriever(self,query:str, k=3):
+    def similarity_search_with_retriever(self,query:str, k=3) -> List[Dict[str, Any]]:
         retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k})
         results = retriever.invoke(query)
         print(f"Found {len(results)} results for query '{query}':")
