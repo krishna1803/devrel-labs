@@ -187,17 +187,32 @@ class PostgresVectorStore(VectorStore):
             print(f"Metadata: {result.metadata}")
         
         print(f"🔍 [Postgres] Retrieved {len(results)} chunks from PDF Collection")
-        return results
-    
+         # Convert Document objects to dictionaries
+        converted_results = self._convert_documents_to_dict(results)
+        print(f"🔍 [Postgres] Retrieved {len(converted_results)} chunks from PDF Collection")
+        return converted_results
+
     def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
-        return self.vectorstore.similarity_search(query, k=n_results)
-     
+        results = self.vectorstore.similarity_search(query, k=n_results)
+        return self._convert_documents_to_dict(results)
+    
     def query_repo_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
-        return self.vectorstore.similarity_search(query, k=n_results)
-    
+        results = self.vectorstore.similarity_search(query, k=n_results)
+        return self._convert_documents_to_dict(results)
+
     def query_web_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
-        return self.vectorstore.similarity_search(query, k=n_results)
+        results = self.vectorstore.similarity_search(query, k=n_results)
+        return self._convert_documents_to_dict(results)
     
+    def _convert_documents_to_dict(self, documents):
+        """Convert LangChain Document objects to dictionaries compatible with the RAG agent"""
+        result = []
+        for doc in documents:
+            result.append({
+                "content": doc.page_content,
+                "metadata": doc.metadata
+            })
+        return result 
      
     def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
