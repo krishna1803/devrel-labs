@@ -134,16 +134,29 @@ class PostgresVectorStore(VectorStore):
         **kwargs: Any,
     ) -> List[str]:
         logging.info(f"add_texts")
-        """Run more texts through the embeddings and add to the vectorstore.
-        Args:
-            texts: Iterable of strings to add to the vectorstore.
-            metadatas: Optional list of metadatas associated with the texts.
-            kwargs: vectorstore specific parameters
-
-        Returns:
-            List of ids from adding the texts into the vectorstore.
-        """
-        raise NotImplementedError("add_texts method must be implemented...")
+        """Add texts to the vector store."""
+        if not texts:
+            return []
+        # Prepare data for Postgres DB
+        texts = list(texts)
+        if metadatas is None:
+            metadatas = [{}] * len(texts)
+        elif len(metadatas) != len(texts):
+            raise ValueError("Length of metadatas must match length of texts")  
+        metadatas = [self._sanitize_metadata(m) for m in metadatas]
+        ids = [f"text_{i}" for i in range(len(texts))]
+        # Create a list of Document objects with content and metadata
+        documents = [
+            Document(
+                page_content=text,
+                metadata=self._sanitize_metadata(metadata)
+            ) for text, metadata in zip(texts, metadatas)
+        ]   
+        # Add documents to the vector store
+        self.add_documents(documents)
+        logging.info(f"Added {len(texts)} texts to Postgres vector store")
+        print(f"Added {len(texts)} texts to Postgres vector store")
+        return ids                    
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize metadata to ensure it can be serialized to JSON"""
