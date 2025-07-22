@@ -22,6 +22,7 @@ except ImportError:
 
 from local_rag_agent import LocalRAGAgent
 from rag_agent import RAGAgent
+from rag_agent_oci import OCIRAGAgent
 
 # Load environment variables and config
 load_dotenv()
@@ -142,6 +143,8 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
             model_type = "Local (Mistral)"
         elif agent_type == "openai":
             model_type = "OpenAI"
+        elif agent_type == "ocigeni": 
+            model_type = "OCI Gen AI"   
         else:
             # All other models are treated as Ollama models
             model_type = "Ollama"
@@ -163,6 +166,10 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
                 return history + [[message, response_text]]
             agent = LocalRAGAgent(vector_store, use_cot=use_cot, collection=collection, 
                                  skip_analysis=skip_analysis, quantization=quantization)
+        elif model_type == "OCI Gen AI":
+            agent = OCIRAGAgent(vector_store, use_cot=use_cot, collection=collection, 
+                                skip_analysis=skip_analysis, model_id="cohere.command-latest", 
+                                compartment_id=os.getenv("OCI_COMPARTMENT_ID"), use_stream=True, vector_db="oracle")
         else:  # Ollama models
             try:
                 agent = LocalRAGAgent(vector_store, model_name=model_name, use_cot=use_cot, 
@@ -299,7 +306,8 @@ def create_interface():
             "mistral",
             "llava",
             "phi3",
-            "deepseek-r1"
+            "deepseek-r1",
+            "ocigeni"
         ])
         if openai_key:
             model_choices.append("openai")
