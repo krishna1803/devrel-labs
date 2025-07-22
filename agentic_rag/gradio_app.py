@@ -168,8 +168,8 @@ def chat(message: str, history: List[List[str]], agent_type: str, use_cot: bool,
                                  skip_analysis=skip_analysis, quantization=quantization)
         elif model_type == "OCI Gen AI":
             agent = OCIRAGAgent(vector_store, use_cot=use_cot, collection=collection, 
-                                skip_analysis=skip_analysis, model_id="cohere.command-latest", 
-                                compartment_id=os.getenv("OCI_COMPARTMENT_ID"), use_stream=True, vector_db="oracle")
+                                skip_analysis=skip_analysis, model_id="meta.llama-4-maverick-17b-128e-instruct-fp8", 
+                                compartment_id=os.getenv("OCI_COMPARTMENT_ID"), use_stream=True)
         else:  # Ollama models
             try:
                 agent = LocalRAGAgent(vector_store, model_name=model_name, use_cot=use_cot, 
