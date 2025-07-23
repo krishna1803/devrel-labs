@@ -5,6 +5,7 @@ import os
 import argparse
 import logging
 from dotenv import load_dotenv
+import time
 
 # OCI imports
 import oci
@@ -299,7 +300,9 @@ Answer the question based on the context provided. If the answer is not in the c
                 prompt
                 | self.genai_client
             )
+            currtime = time.time()
             response = chain.invoke({"query": query})
+            logger.info(f"Response from LLM generated in {time.time() - currtime:.2f} seconds")
             # For streaming, we need to collect the tokens
             answer = ""
             for chunk in response:
@@ -314,8 +317,10 @@ Answer the question based on the context provided. If the answer is not in the c
                 | self.genai_client
                 | StrOutputParser()
             )
+            currtime = time.time()
             answer = chain.invoke({"query": query})
-        
+            logger.info(f"Response from LLM generated in {time.time() - currtime:.2f} seconds")
+
         # Add sources to response if available
         sources = {}
         if context:
@@ -358,7 +363,9 @@ Answer the question based on the context provided. If the answer is not in the c
             | self.genai_client
             | StrOutputParser()
         )
+        currtime = time.time()
         answer = chain.invoke({"query": query})
+        logger.info(f"General response generated in {time.time() - currtime:.2f} seconds")
         # Return a general response without context
         
         logger.info("No context available, using general knowledge response")    
