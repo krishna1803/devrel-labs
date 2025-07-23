@@ -33,6 +33,7 @@ class Agent(BaseModel):
             # Split the prompt at "Context:" and keep only the first part
             parts = prompt.split("Context:")
             # Keep the first part and add a note that context is omitted
+            logger.info(f"\n Full prompt passed to LLM:\n{'-'*40}\n{prompt}\n{'-'*40}")
             truncated_prompt = parts[0] + "Context: [Context omitted for brevity]"
             if len(parts) > 2 and "Key Findings:" in parts[1]:
                 # For researcher prompts, keep the "Key Findings:" part
