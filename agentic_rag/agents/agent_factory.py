@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 import logging
 import warnings
+import time
 from transformers import logging as transformers_logging
 
 # Configure logging
@@ -88,7 +89,11 @@ class PlannerAgent(Agent):
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Planner")
         
+        currtime = time.time()
+        logger.info(f"Generating plan using LLM...")
+        # Use the LLM to generate the plan 
         response = self.llm.invoke(messages)
+        logger.info(f"Plan generated in {time.time() - currtime:.2f} seconds")
         self.log_response(response.content, "Planner")
         return response.content
 
@@ -133,8 +138,12 @@ class ResearchAgent(Agent):
         messages = prompt.format_messages(step=step, context=context_str)
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Researcher")
-        
+
+        currtime = time.time()
+        logger.info(f"Generating research summary using LLM...")
+        # Use the LLM to generate the research summary
         response = self.llm.invoke(messages)
+        logger.info(f"Research summary generated in {time.time() - currtime:.2f} seconds")
         self.log_response(response.content, "Researcher")
         
         return [{"content": response.content, "metadata": {"source": "Research Summary"}}]
@@ -166,8 +175,12 @@ class ReasoningAgent(Agent):
         messages = prompt.format_messages(step=step, query=query, context=context_str)
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Reasoner")
-        
+
+        currtime = time.time()
+        logger.info(f"Generating reasoning conclusion using LLM...")
+        # Use the LLM to generate the reasoning conclusion
         response = self.llm.invoke(messages)
+        logger.info(f"Reasoning conclusion generated in {time.time() - currtime:.2f} seconds")
         self.log_response(response.content, "Reasoner")
         return response.content
 
@@ -197,7 +210,11 @@ class SynthesisAgent(Agent):
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Synthesizer")
         
+        currtime = time.time()
+        logger.info(f"Generating final answer using LLM...")
         response = self.llm.invoke(messages)
+        logger.info(f"Final answer generated in {time.time() - currtime:.2f} seconds")
+        
         self.log_response(response.content, "Synthesizer")
         return response.content
 
