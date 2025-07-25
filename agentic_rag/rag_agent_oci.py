@@ -51,7 +51,9 @@ def load_oci_config():
 
 class OCIRAGAgent:
     def __init__(self, vector_store: OracleDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
-                 model_id: str = "cohere.command-latest", compartment_id: str = None, use_stream:bool = False):
+                 model_id: str = "cohere.command-latest", compartment_id: str = None, use_stream:bool = False,max_chunks_per_step: int = 2,
+                 max_findings_per_step: int = 3, 
+                 max_tokens_per_finding: int = 500):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
         if vector_store is OracleDBVectorStore:
@@ -63,7 +65,10 @@ class OCIRAGAgent:
         self.model_id = model_id
         self.compartment_id = compartment_id or os.getenv("OCI_COMPARTMENT_ID")
         self.use_stream = use_stream
-        
+        self.max_chunks_per_step = max_chunks_per_step
+        self.max_findings_per_step = max_findings_per_step
+        self.max_tokens_per_finding = max_tokens_per_finding
+
         # Set up OCI configuration
         config = load_oci_config()
         
@@ -160,21 +165,32 @@ class OCIRAGAgent:
             logger.info("Step 2: Research")
             research_results = []
             if self.agents.get("researcher") is not None and initial_context:
-                for step in plan.split("\n"):
-                    if not step.strip():
-                        continue
+                # Limit number of steps to process
+                plan_steps = [step for step in plan.split("\n") if step.strip()]
+                if len(plan_steps) > 3:  # Limit to top 3 steps
+                    logger.info(f"Limiting plan from {len(plan_steps)} steps to 3 steps")
+                    plan_steps = plan_steps[:3]
+                    
+                for step in plan_steps:
                     try:
-                        step_research = self.agents["researcher"].research(query, step)
-                        # Extract findings from research result
-                        findings = step_research.get("findings", []) if isinstance(step_research, dict) else []
+                        # Pass limiting parameters to research method
+                        step_research = self.agents["researcher"].research(
+                            query, 
+                            step, 
+                            max_chunks=self.max_chunks_per_step,
+                            max_findings=self.max_findings_per_step,
+                            max_tokens=self.max_tokens_per_finding
+                        )
+                        
+                        # Extract and limit findings
+                        findings = step_research if isinstance(step_research, list) else step_research.get("findings", [])
+                        
+                        # Store only what's needed
                         research_results.append({"step": step, "findings": findings})
                         
-                        # Log which sources were used for this step
-                        try:
-                            source_indices = [initial_context.index(finding) + 1 for finding in findings if finding in initial_context]
-                            logger.info(f"Research for step: {step}\nUsing sources: {source_indices}")
-                        except ValueError as ve:
-                            logger.warning(f"Could not find some findings in initial context: {str(ve)}")
+                        # Log sources more efficiently
+                        logger.info(f"Research for step: {step} - Found {len(findings)} findings")
+                        
                     except Exception as e:
                         logger.error(f"Error during research for step '{step}': {str(e)}")
                         research_results.append({"step": step, "findings": []})
@@ -386,6 +402,12 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Show full content of sources")
     parser.add_argument("--use-stream", action="store_true", help="Enable streaming responses from OCI Gen AI")
     parser.add_argument("--vector-db", default="oracle", choices=["postgres", "oracle"], help="Type of vector database to use")
+    parser.add_argument("--max-chunks-per-step", type=int, default=2, 
+                        help="Maximum chunks per research step (default: 2)")
+    parser.add_argument("--max-findings-per-step", type=int, default=3, 
+                        help="Maximum findings per research step (default: 3)")
+    parser.add_argument("--max-tokens-per-finding", type=int, default=500, 
+                        help="Maximum tokens per finding (default: 500)")
 
     args = parser.parse_args()
     
@@ -425,7 +447,10 @@ def main():
             collection=args.collection,
             model_id=args.model_id,
             compartment_id=compartment_id,
-            use_stream=args.use_stream
+            use_stream=args.use_stream,
+            max_chunks_per_step=args.max_chunks_per_step,
+            max_findings_per_step=args.max_findings_per_step,
+            max_tokens_per_finding=args.max_tokens_per_finding
         )
     
         

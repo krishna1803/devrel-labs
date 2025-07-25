@@ -51,6 +51,7 @@ class Agent(BaseModel):
         if len(response) > 500:
             truncated_response = response[:500] + "... [response truncated]"
             logger.info(f"\n{'='*80}\n{prefix} Response:\n{'-'*40}\n{truncated_response}\n{'='*80}")
+            logger.info(f"Full response is : \n{'-'*40}\n{response}\n{'='*80}")
         else:
             logger.info(f"\n{'='*80}\n{prefix} Response:\n{'-'*40}\n{response}\n{'='*80}")
 
@@ -110,31 +111,50 @@ class ResearchAgent(Agent):
             llm=llm,
             vector_store=vector_store
         )
-        
-    def research(self, query: str, step: str) -> List[Dict[str, Any]]:
+
+    def research(self, query: str, step: str, max_chunks: int = 3, max_findings: int = 3, max_tokens: int = 500) -> List[Dict[str, Any]]:
         logger.info(f"\n🔍 Researching for step: {step}")
         
-        # Query all collections
-        pdf_results = self.vector_store.query_pdf_collection(query)
-        repo_results = self.vector_store.query_repo_collection(query)
+        # Query all collections with limits
+        pdf_results = self.vector_store.query_pdf_collection(query, n_results=max_chunks)
+        repo_results = self.vector_store.query_repo_collection(query, n_results=max_chunks)
         
-        # Combine results
-        all_results = pdf_results + repo_results
-        logger.info(f"Found {len(all_results)} relevant documents")
+        # Combine and limit results
+        all_results = (pdf_results + repo_results)[:max_chunks]
+        logger.info(f"Found {len(all_results)} relevant documents (limited to {max_chunks})")
         
         if not all_results:
             logger.warning("No relevant documents found")
             return []
+        
+        # Create context string with length limit
+        context_items = []
+        total_chars = 0
+        char_limit = max_tokens * 4  # Approximate chars-to-tokens ratio
+        
+        for i, item in enumerate(all_results):
+            content = item['content']
+            if total_chars + len(content) > char_limit:
+                # Truncate this item to fit within limit
+                remaining_chars = char_limit - total_chars
+                if remaining_chars > 100:  # Only add if we can include meaningful content
+                    content = content[:remaining_chars] + "..."
+                    context_items.append(f"Source {i+1}:\n{content}")
+                break
             
+            context_items.append(f"Source {i+1}:\n{content}")
+            total_chars += len(content)
+        
+        context_str = "\n\n".join(context_items)
+        logger.info(f"Context created with {len(context_items)} items, total chars: {total_chars}")
+        #prepare the template for the LLM prompt
         template = """Extract and summarize key information relevant to this step.
         
         Step: {step}
-        Context: {context}
+        Context: {context_str}
         
         Key Findings:"""
         
-        # Create context string but don't log it
-        context_str = "\n\n".join([f"Source {i+1}:\n{item['content']}" for i, item in enumerate(all_results)])
         prompt = ChatPromptTemplate.from_template(template)
         messages = prompt.format_messages(step=step, context=context_str)
         prompt_text = "\n".join([msg.content for msg in messages])
