@@ -221,7 +221,9 @@ class SynthesisAgent(Agent):
         template = """Combine the reasoning steps into a clear, comprehensive answer.
         
         Query: {query}
-        Steps: {steps}
+        Steps: {reasoning_steps}
+        
+        Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
         
         Answer:"""
         
