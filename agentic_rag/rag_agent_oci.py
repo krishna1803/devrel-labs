@@ -221,6 +221,8 @@ class OCIRAGAgent:
 
             try:
                 final_answer = self.agents["synthesizer"].synthesize(query, reasoning_steps)
+                # Remove LaTeX formatting from final answer
+                final_answer = self._remove_latex_formatting(final_answer)
                 logger.info(f"Final synthesized answer generated")
                 return {
                     "answer": final_answer,
@@ -243,6 +245,19 @@ class OCIRAGAgent:
         except Exception as e:
             logger.error(f"Error in CoT processing: {str(e)}")
             return self._generate_general_response(query)
+    
+    def _remove_latex_formatting(self, text: str) -> str:
+        """Remove LaTeX-style formatting from the text"""
+        if not text:
+            return text
+        
+        # Remove LaTeX-style boxed formatting
+        text = text.replace("$\\boxed{", "").replace("\\boxed{", "").replace("}$", "").replace("}", "")
+        
+        # Remove any remaining dollar signs or backslashes
+        text = text.replace("$", "").replace("\\", "")
+        
+        return text.strip()
     
     def _process_query_standard(self, query: str) -> Dict[str, Any]:
         """Process query using standard approach without Chain of Thought"""
