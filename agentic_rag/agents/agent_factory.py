@@ -219,26 +219,30 @@ class SynthesisAgent(Agent):
         logger.info(f"\n📝 Synthesizing final answer from {len(reasoning_steps)} reasoning steps")
         
         template = """Combine the reasoning steps into a clear, comprehensive answer.
-        
-        Query: {query}
-        Steps: {reasoning_steps}
-        
-        Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
-        
-        Answer:"""
+    
+    Query: {query}
+    Steps: {steps}
+    
+    Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
+    
+    Answer:"""
         
         steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
         prompt = ChatPromptTemplate.from_template(template)
         messages = prompt.format_messages(query=query, steps=steps_str)
+    
+        # Log what we're sending to the LLM
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Synthesizer")
-        
-        currtime = time.time()
-        logger.info(f"Generating final answer using LLM...")
+    
+        # Time the execution
+        start_time = time.time()
         response = self.llm.invoke(messages)
-        logger.info(f"Final answer generated in {time.time() - currtime:.2f} seconds")
-        
-        self.log_response(response.content, "Synthesizer")
+        duration = time.time() - start_time
+    
+        # Log what we got back
+        self.log_response(response.content, f"Synthesizer ({duration:.2f}s)")
+    
         return response.content
 
 def create_agents(llm, vector_store=None):
@@ -248,4 +252,4 @@ def create_agents(llm, vector_store=None):
         "researcher": ResearchAgent(llm, vector_store) if vector_store else None,
         "reasoner": ReasoningAgent(llm),
         "synthesizer": SynthesisAgent(llm)
-    } 
+    }
