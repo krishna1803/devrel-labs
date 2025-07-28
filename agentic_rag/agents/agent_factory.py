@@ -235,29 +235,49 @@ class SynthesisAgent(Agent):
             logger.warning("Invalid reasoning steps detected. Falling back to general response.")
             return "I don't have enough valid analysis to provide a complete answer."
         
-        template = """Combine the reasoning steps into a clear, comprehensive answer.
+        # Create steps_str properly
+        steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
+        
+        # Use a structured approach for ChatPromptTemplate
+        from langchain_core.messages import SystemMessage
+        
+        # Define system and human messages separately
+        system_message_template = SystemMessage(
+            content="You are a synthesis agent that combines reasoning steps into clear answers. Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \\boxed{{}}, or markdown formatting."
+        )
+        
+        human_template = """Combine the reasoning steps into a clear, comprehensive answer.
 
 Query: {query}
 Steps: {steps}
 
-Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
-
 Answer:"""
     
-        steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
-        prompt = ChatPromptTemplate.from_template(template)
-        messages = prompt.format_messages(query=query, steps=steps_str)
-
-        # Log what we're sending to the LLM
-        prompt_text = "\n".join([msg.content for msg in messages])
-        self.log_prompt(prompt_text, "Synthesizer")
-
-        # Time the execution with robust error handling
-        start_time = time.time()
+        # Create prompt template from messages
+        prompt = ChatPromptTemplate.from_messages([
+            system_message_template,
+            ("human", human_template)
+        ])
+    
+        # Create key-value pairs dictionary for formatting
+        format_dict = {
+            "query": query,
+            "steps": steps_str
+        }
+    
         try:
+            # Format the messages using the dictionary
+            messages = prompt.format_messages(**format_dict)
+        
+            # Log what we're sending to the LLM
+            prompt_text = "\n".join([msg.content for msg in messages])
+            self.log_prompt(prompt_text, "Synthesizer")
+
+            # Time the execution with robust error handling
+            start_time = time.time()
             response = self.llm.invoke(messages)
             duration = time.time() - start_time
-            
+        
             # Handle different response formats
             if hasattr(response, "content"):
                 result = response.content
@@ -266,17 +286,27 @@ Answer:"""
             elif isinstance(response, str):
                 result = response
             else:
-                # Last resort - convert to string
-                logger.warning(f"Unexpected response type: {type(response)}")
                 result = str(response)
-                
+            
             self.log_response(result, f"Synthesizer ({duration:.2f}s)")
             return result
-            
+        
         except Exception as e:
-            logger.error(f"Error in synthesis: {str(e)}, {type(e)}")
-            # Create fallback response from reasoning steps
-            return f"Based on the analysis, {reasoning_steps[0][:200]}..."
+            logger.error(f"Error in synthesis template formatting: {str(e)}")
+        
+            # Try a simpler template as fallback
+            fallback_template = ChatPromptTemplate.from_messages([
+                ("system", "Synthesize the reasoning steps into a final answer."),
+                ("human", f"Query: {query}\n\nSteps: {steps_str}\n\nProvide a plain text answer:")
+            ])
+        
+            try:
+                fallback_messages = fallback_template.format_messages()
+                fallback_response = self.llm.invoke(fallback_messages)
+                return fallback_response.content
+            except Exception as e2:
+                logger.error(f"Even fallback template failed: {str(e2)}")
+                return f"Based on the analysis, {reasoning_steps[0][:200]}..."
 
 def create_agents(llm, vector_store=None):
     """Create and return the set of specialized agents"""
