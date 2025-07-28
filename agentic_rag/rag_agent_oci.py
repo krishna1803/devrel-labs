@@ -6,6 +6,8 @@ import argparse
 import logging
 from dotenv import load_dotenv
 import time
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # OCI imports
 import oci
@@ -109,45 +111,49 @@ class OCIRAGAgent:
         
         # Get initial context based on selected collection
         initial_context = []
-        if self.collection == "PDF Collection":
-            logger.info(f"Retrieving context from PDF Collection for query: '{query}'")
-            pdf_context = self.vector_store.query_pdf_collection(query)
-            initial_context.extend(pdf_context)
-            logger.info(f"Retrieved {len(pdf_context)} chunks from PDF Collection")
-            # Log each chunk with citation number but not full content
-            for i, chunk in enumerate(pdf_context):
-                source = chunk["metadata"].get("source", "Unknown")
-                pages = chunk["metadata"].get("page_numbers", [])
-                logger.info(f"Source [{i+1}]: {source} (pages: {pages})")
-                content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
-        elif self.collection == "Repository Collection":
-            logger.info(f"Retrieving context from Repository Collection for query: '{query}'")
-            repo_context = self.vector_store.query_repo_collection(query)
-            initial_context.extend(repo_context)
-            logger.info(f"Retrieved {len(repo_context)} chunks from Repository Collection")
-            for i, chunk in enumerate(repo_context):
-                source = chunk["metadata"].get("source", "Unknown")
-                file_path = chunk["metadata"].get("file_path", "Unknown")
-                logger.info(f"Source [{i+1}]: {source} (file: {file_path})")
-                content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
-        elif self.collection == "Web Knowledge Base":
-            logger.info(f"Retrieving context from Web Knowledge Base for query: '{query}'")
-            web_context = self.vector_store.query_web_collection(query)
-            initial_context.extend(web_context)
-            logger.info(f"Retrieved {len(web_context)} chunks from Web Knowledge Base")
-            for i, chunk in enumerate(web_context):
-                source = chunk["metadata"].get("source", "Unknown")
-                title = chunk["metadata"].get("title", "Unknown")
-                logger.info(f"Source [{i+1}]: {source} (title: {title})")
-                content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
-        else:
-            logger.info("Using General Knowledge collection, no context retrieval needed")
-        
         try:
-            # Step 1: Planning
+            # Fetch context (collection-specific code remains the same)
+            if self.collection == "PDF Collection":
+                logger.info(f"Retrieving context from PDF Collection for query: '{query}'")
+                pdf_context = self.vector_store.query_pdf_collection(query)
+                initial_context.extend(pdf_context)
+                logger.info(f"Retrieved {len(pdf_context)} chunks from PDF Collection")
+                # Log each chunk with citation number but not full content
+                for i, chunk in enumerate(pdf_context):
+                    source = chunk["metadata"].get("source", "Unknown")
+                    pages = chunk["metadata"].get("page_numbers", [])
+                    logger.info(f"Source [{i+1}]: {source} (pages: {pages})")
+                    content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
+                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+            elif self.collection == "Repository Collection":
+                logger.info(f"Retrieving context from Repository Collection for query: '{query}'")
+                repo_context = self.vector_store.query_repo_collection(query)
+                initial_context.extend(repo_context)
+                logger.info(f"Retrieved {len(repo_context)} chunks from Repository Collection")
+                for i, chunk in enumerate(repo_context):
+                    source = chunk["metadata"].get("source", "Unknown")
+                    file_path = chunk["metadata"].get("file_path", "Unknown")
+                    logger.info(f"Source [{i+1}]: {source} (file: {file_path})")
+                    content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
+                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+            elif self.collection == "Web Knowledge Base":
+                logger.info(f"Retrieving context from Web Knowledge Base for query: '{query}'")
+                web_context = self.vector_store.query_web_collection(query)
+                initial_context.extend(web_context)
+                logger.info(f"Retrieved {len(web_context)} chunks from Web Knowledge Base")
+                for i, chunk in enumerate(web_context):
+                    source = chunk["metadata"].get("source", "Unknown")
+                    title = chunk["metadata"].get("title", "Unknown")
+                    logger.info(f"Source [{i+1}]: {source} (title: {title})")
+                    content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
+                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+            else:
+                logger.info("Using General Knowledge collection, no context retrieval needed")
+            
+            # Apply token budget to context
+            initial_context = self._limit_context(initial_context, max_tokens=6000)
+            
+            # Step 1: Planning - Get steps to follow
             logger.info("Step 1: Planning")
             if not self.agents or "planner" not in self.agents:
                 logger.warning("No planner agent available, using direct response")
@@ -161,93 +167,81 @@ class OCIRAGAgent:
                 logger.info("Falling back to general response")
                 return self._generate_general_response(query)
             
-            # Step 2: Research each step (if researcher is available)
-            logger.info("Step 2: Research")
-            research_results = []
-            if self.agents.get("researcher") is not None and initial_context:
-                # Limit number of steps to process
-                plan_steps = [step for step in plan.split("\n") if step.strip()]
-                if len(plan_steps) > 3:  # Limit to top 3 steps
-                    logger.info(f"Limiting plan from {len(plan_steps)} steps to 3 steps")
-                    plan_steps = plan_steps[:3]
-                    
-                for step in plan_steps:
-                    try:
-                        # Pass limiting parameters to research method
-                        step_research = self.agents["researcher"].research(
-                            query, 
-                            step, 
-                            max_chunks=self.max_chunks_per_step,
-                            max_findings=self.max_findings_per_step,
-                            max_tokens=self.max_tokens_per_finding
-                        )
-                        
-                        # Extract and limit findings
-                        findings = step_research if isinstance(step_research, list) else step_research.get("findings", [])
-                        
-                        # Store only what's needed
-                        research_results.append({"step": step, "findings": findings})
-                        
-                        # Log sources more efficiently
-                        logger.info(f"Research for step: {step} - Found {len(findings)} findings")
-                        
-                    except Exception as e:
-                        logger.error(f"Error during research for step '{step}': {str(e)}")
-                        research_results.append({"step": step, "findings": []})
-            else:
-                # If no researcher or no context, use the steps directly
-                research_results = [{"step": step, "findings": []} for step in plan.split("\n") if step.strip()]
-                logger.info("No research performed (no researcher agent or no context available)")
+            # Step 2: Research each step in parallel
+            logger.info("Step 2: Research (parallel execution)")
+            plan_steps = [step for step in plan.split("\n") if step.strip()]
+            if len(plan_steps) > 3:
+                logger.info(f"Limiting plan from {len(plan_steps)} steps to 3 steps")
+                plan_steps = plan_steps[:3]
             
-            # Step 3: Reasoning about each step
-            logger.info("Step 3: Reasoning")
-            if not self.agents.get("reasoner"):
-                logger.warning("No reasoner agent available, using direct response")
-                return self._generate_general_response(query)
-            
+            # Use asyncio to run research steps in parallel
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                research_results = loop.run_until_complete(
+                    self._research_steps_parallel(query, plan_steps)
+                )
+            finally:
+                loop.close()
+                
+            # Step 3: Batch reasoning for better efficiency
+            logger.info("Step 3: Reasoning (batch processing)")
             reasoning_steps = []
-            for result in research_results:
-                try:
-                    step_reasoning = self.agents["reasoner"].reason(
-                        query,
-                        result["step"],
-                        result["findings"] if result["findings"] else [{"content": "Using general knowledge", "metadata": {"source": "General Knowledge"}}]
-                    )
-                    reasoning_steps.append(step_reasoning)
-                    logger.info(f"Reasoning for step: {result['step']}\n{step_reasoning}")
-                except Exception as e:
-                    logger.error(f"Error in reasoning for step '{result['step']}': {str(e)}")
-                    reasoning_steps.append(f"Error in reasoning for this step: {str(e)}")
             
-            # Step 4: Synthesize final answer
+            # Try batch reasoning if available
+            try:
+                # Execute batch reasoning for all steps at once (to be added to ReasoningAgent)
+                reasoning_results = self._batch_reasoning(query, research_results)
+                reasoning_steps.extend(reasoning_results)
+            except Exception as e:
+                logger.error(f"Batch reasoning failed: {str(e)}")
+                
+                # Fall back to sequential reasoning if batch fails
+                for result in research_results:
+                    try:
+                        if self.agents.get("reasoner"):
+                            findings = result["findings"] or [{"content": "No specific information found.", 
+                                                              "metadata": {"source": "General Knowledge"}}]
+                            step_reasoning = self.agents["reasoner"].reason(query, result["step"], findings)
+                            reasoning_steps.append(step_reasoning)
+                    except Exception as e:
+                        logger.error(f"Error reasoning about step '{result['step']}': {str(e)}")
+                        # Add partial result if reasoning fails
+                        if result["findings"]:
+                            reasoning_steps.append(f"Step {result['step']}: Based on the available information, "
+                                                  f"{result['findings'][0]['content'][:200]}...")
+            
+            # Step 4: Synthesize final answer with explicit formatting instructions
             logger.info("Step 4: Synthesis")
-            if not self.agents.get("synthesizer"):
-                logger.warning("No synthesizer agent available, using direct response")
+            # Before synthesis
+            logger.info(f"Reasoning steps provided to synthesizer:\n{reasoning_steps}")
+            if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
+                logger.error("Invalid reasoning steps detected. Falling back to general response.")
                 return self._generate_general_response(query)
-            
+
             try:
                 final_answer = self.agents["synthesizer"].synthesize(query, reasoning_steps)
-                logger.info(f"Final synthesized answer:\n{final_answer}")
-                
-                # Handle string or dict response from synthesizer
-                if isinstance(final_answer, str):
-                    answer = final_answer
-                else:
-                    answer = final_answer.get("answer", final_answer)
-                    
+                logger.info(f"Final synthesized answer generated")
+                return {
+                    "answer": final_answer,
+                    "context": initial_context,
+                    "reasoning_steps": reasoning_steps
+                }
             except Exception as e:
                 logger.error(f"Error in synthesis step: {str(e)}")
-                logger.info("Falling back to general response")
-                return self._generate_general_response(query)
-            
-            return {
-                "answer": answer,
-                "context": initial_context,
-                "reasoning_steps": reasoning_steps
-            }
+                # Emergency fallback - join reasoning steps directly
+                fallback_answer = "\n\n".join([
+                    f"Step {i+1}: {step[:200]}..." 
+                    for i, step in enumerate(reasoning_steps) if isinstance(step, str) and step.strip()
+                ])
+                return {
+                    "answer": f"Here's what I found:\n\n{fallback_answer}",
+                    "context": initial_context,
+                    "reasoning_steps": reasoning_steps
+                }
+                
         except Exception as e:
-            logger.error(f"Error in CoT processing: {str(e)}", exc_info=True)
-            logger.info("Falling back to general response")
+            logger.error(f"Error in CoT processing: {str(e)}")
             return self._generate_general_response(query)
     
     def _process_query_standard(self, query: str) -> Dict[str, Any]:
@@ -389,6 +383,173 @@ Answer the question based on the context provided. If the answer is not in the c
             "answer": answer,
             "context": []
         }
+    
+    def _limit_context(self, documents: List[Dict[str, Any]], max_tokens: int = 6000) -> List[Dict[str, Any]]:
+        """Limit context to fit within a token budget"""
+        if not documents:
+            return []
+        
+        limited_docs = []
+        token_count = 0
+        
+        # Simple token estimation (4 chars ≈ 1 token)
+        char_to_token_ratio = 4
+        
+        for doc in documents:
+            # Estimate tokens in this document
+            doc_tokens = len(doc["content"]) // char_to_token_ratio
+            
+            # If adding this would exceed budget, stop here
+            if token_count + doc_tokens > max_tokens:
+                # If we haven't added any documents yet, truncate this one
+                if not limited_docs:
+                    chars_to_keep = max_tokens * char_to_token_ratio
+                    truncated_content = doc["content"][:chars_to_keep] + "..."
+                    truncated_doc = doc.copy()
+                    truncated_doc["content"] = truncated_content
+                    limited_docs.append(truncated_doc)
+                    logger.info(f"Truncated document to fit token budget")
+                break
+            
+            limited_docs.append(doc)
+            token_count += doc_tokens
+        
+        logger.info(f"Limited context from {len(documents)} to {len(limited_docs)} documents (~{token_count} tokens)")
+        return limited_docs
+
+    async def _research_steps_parallel(self, query: str, plan_steps: List[str]) -> List[Dict[str, Any]]:
+        """Process research steps in parallel"""
+        async def _research_single_step(step: str):
+            try:
+                with ThreadPoolExecutor() as executor:
+                    return await asyncio.get_event_loop().run_in_executor(
+                        executor,
+                        self.agents["researcher"].research,
+                        query, step, 
+                        self.max_chunks_per_step,
+                        self.max_findings_per_step,
+                        self.max_tokens_per_finding
+                    )
+            except Exception as e:
+                logger.error(f"Error researching step '{step}': {str(e)}")
+                return {"step": step, "findings": []}
+        
+        # Create tasks for all steps
+        tasks = [_research_single_step(step) for step in plan_steps]
+        
+        # Execute all research tasks concurrently
+        results = await asyncio.gather(*tasks)
+        
+        # Organize results by step
+        research_results = []
+        for step, result in zip(plan_steps, results):
+            findings = result if isinstance(result, list) else result.get("findings", [])
+            research_results.append({"step": step, "findings": findings})
+            logger.info(f"Research for step: {step} - Found {len(findings)} findings")
+        
+        return research_results
+
+    def _batch_reasoning(self, query: str, research_results: List[Dict[str, Any]]) -> List[str]:
+        """Process multiple reasoning steps in a single batch"""
+        if not self.agents.get("reasoner"):
+            raise ValueError("No reasoner agent available")
+            
+        # Format all steps and findings for a single prompt
+        steps_text = []
+        for i, result in enumerate(research_results):
+            step = result["step"]
+            findings = result["findings"]
+            
+            # Format findings for this step
+            findings_text = ""
+            for j, finding in enumerate(findings[:2]):  # Limit to 2 findings per step
+                content = finding.get("content", "")[:300]  # Truncate long findings
+                source = finding.get("metadata", {}).get("source", "Unknown")
+                findings_text += f"Finding {j+1} ({source}): {content}\n\n"
+                
+            if not findings:
+                findings_text = "No specific information found for this step."
+                
+            # Add formatted step with its findings
+            steps_text.append(f"STEP {i+1}: {step}\n{findings_text}")
+            
+        # Join all steps
+        all_steps = "\n\n".join(steps_text)
+        
+        # Create a prompt template for batch reasoning
+        template = f"""Based on the query and research findings, provide clear reasoning for each step.
+
+Query: {{query}}
+
+{all_steps}
+
+Provide your analysis for each step separately:
+"""
+        
+        # Call the LLM directly through the reasoner's LLM
+        messages = [{"role": "user", "content": template.format(query=query)}]
+        
+        start_time = time.time()
+        response = self.agents["reasoner"].llm.invoke(messages)
+        logger.info(f"Batch reasoning completed in {time.time() - start_time:.2f} seconds")
+        
+        # Parse the response into separate reasoning steps
+        reasoning_text = response.content if hasattr(response, "content") else str(response)
+        
+        # Split by "STEP" markers
+        step_parts = reasoning_text.split("STEP")
+        reasoning_steps = []
+        
+        # Process each part (skip first empty part if exists)
+        for part in step_parts[1:] if step_parts[0].strip() == "" else step_parts:
+            if part.strip():
+                # Clean up and add to results
+                step_text = part.strip()
+                reasoning_steps.append(step_text)
+        
+        # If parsing failed, use whole response as one step
+        if not reasoning_steps:
+            reasoning_steps = [reasoning_text]
+            
+        return reasoning_steps
+
+    def synthesize(self, query: str, reasoning_steps: List[str]) -> str:
+        logger.info(f"\n📝 Synthesizing final answer from {len(reasoning_steps)} reasoning steps")
+        
+        # Validate reasoning steps
+        if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
+            logger.error("Invalid reasoning steps provided to synthesizer. Falling back to general response.")
+            return "Unable to synthesize a response due to invalid reasoning steps."
+        
+        template = """Combine the reasoning steps into a clear, comprehensive answer.
+    
+    Query: {query}
+    Steps: {steps}
+    
+    Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
+    
+    Answer:"""
+        
+        steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
+        prompt = ChatPromptTemplate.from_template(template)
+        messages = prompt.format_messages(query=query, steps=steps_str)
+        
+        # Log what we're sending to the LLM
+        prompt_text = "\n".join([msg.content for msg in messages])
+        self.log_prompt(prompt_text, "Synthesizer")
+        
+        # Time the execution
+        start_time = time.time()
+        try:
+            response = self.llm.invoke(messages)
+            if hasattr(response, "content"):
+                return response.content
+            else:
+                logger.error("LLM response does not contain 'content'. Falling back to general response.")
+                return "Unable to generate a response due to unexpected LLM output."
+        except Exception as e:
+            logger.error(f"Error during LLM invocation: {str(e)}")
+            return "An error occurred while generating the response."
 
 def main():
     parser = argparse.ArgumentParser(description="Query documents using OCI Generative AI")
