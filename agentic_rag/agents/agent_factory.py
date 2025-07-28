@@ -147,27 +147,39 @@ class ResearchAgent(Agent):
         
         context_str = "\n\n".join(context_items)
         logger.info(f"Context created with {len(context_items)} items, total chars: {total_chars}")
-        #prepare the template for the LLM prompt
+        
+        # Fixed template - use context directly, not as a variable
         template = """Extract and summarize key information relevant to this step.
-        
-        Step: {step}
-        Context: {context_str}
-        
-        Key Findings:"""
-        
-        prompt = ChatPromptTemplate.from_template(template)
-        messages = prompt.format_messages(step=step, context=context_str)
-        prompt_text = "\n".join([msg.content for msg in messages])
-        self.log_prompt(prompt_text, "Researcher")
+    
+Step: {step}
+Context: {context}
 
-        currtime = time.time()
-        logger.info(f"Generating research summary using LLM...")
-        # Use the LLM to generate the research summary
-        response = self.llm.invoke(messages)
-        logger.info(f"Research summary generated in {time.time() - currtime:.2f} seconds")
-        self.log_response(response.content, "Researcher")
+Key Findings:"""
+    
+        # Use proper parameter name matching the template
+        prompt = ChatPromptTemplate.from_template(template)
+        # Fixed: Pass context_str as 'context' to match template
+        messages = prompt.format_messages(step=step, context=context_str)
         
-        return [{"content": response.content, "metadata": {"source": "Research Summary"}}]
+        # Log what we're sending to the LLM
+        prompt_text = "\n".join([msg.content for msg in messages])
+        self.log_prompt(prompt_text, "Research")
+        
+        # Time the execution
+        start_time = time.time()
+        response = self.llm.invoke(messages)
+        duration = time.time() - start_time
+        
+        # Log what we got back
+        self.log_response(response.content, f"Research ({duration:.2f}s)")
+        
+        # Convert findings to list format
+        findings = [{
+            "content": response.content,
+            "metadata": {"source": "Research Summary"}
+        }]
+        
+        return findings
 
 class ReasoningAgent(Agent):
     """Agent responsible for logical reasoning and analysis"""
@@ -257,17 +269,31 @@ class SynthesisAgent(Agent):
         return final_answer
 
     def _remove_latex_formatting(self, text: str) -> str:
-        """Remove LaTeX-style formatting from the text"""
+        """Remove LaTeX-style formatting from the text using regex for more robust cleaning"""
         if not text:
             return text
         
-        # Remove LaTeX-style boxed formatting
-        text = text.replace("$\\boxed{", "").replace("\\boxed{", "").replace("}$", "").replace("}", "")
+        import re
         
-        # Remove any remaining dollar signs or backslashes
-        text = text.replace("$", "").replace("\\", "")
+        # Use regex to clean boxed expressions and other LaTeX patterns
+        patterns = [
+            (r'\$\\boxed\{([^}]+)\}\$', r'\1'),  # $\boxed{text}$
+            (r'\$\\boxed\{([^}]+)\}', r'\1'),    # $\boxed{text}
+            (r'\\boxed\{([^}]+)\}\$', r'\1'),    # \boxed{text}$
+            (r'\\boxed\{([^}]+)\}', r'\1'),      # \boxed{text}
+            (r'boxed\{([^}]+)\}', r'\1'),        # boxed{text} without backslash
+        ]
         
-        return text.strip()
+        result = text
+        for pattern, replacement in patterns:
+            result = re.sub(pattern, replacement, result)
+        
+        # Remove any remaining LaTeX indicators
+        result = result.replace('$', '')
+        result = result.replace('\\', '')
+        result = result.replace('boxed{', '').replace('}', '')
+        
+        return result.strip()
 
 def create_agents(llm, vector_store=None):
     """Create and return the set of specialized agents"""

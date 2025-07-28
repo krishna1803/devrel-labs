@@ -188,28 +188,25 @@ class OCIRAGAgent:
             logger.info("Step 3: Reasoning (batch processing)")
             reasoning_steps = []
             
-            # Try batch reasoning if available
-            try:
-                # Execute batch reasoning for all steps at once (to be added to ReasoningAgent)
-                reasoning_results = self._batch_reasoning(query, research_results)
-                reasoning_steps.extend(reasoning_results)
-            except Exception as e:
-                logger.error(f"Batch reasoning failed: {str(e)}")
-                
-                # Fall back to sequential reasoning if batch fails
-                for result in research_results:
-                    try:
-                        if self.agents.get("reasoner"):
-                            findings = result["findings"] or [{"content": "No specific information found.", 
-                                                              "metadata": {"source": "General Knowledge"}}]
+            # Fall back to sequential reasoning if batch fails
+            for result in research_results:
+                try:
+                    if self.agents.get("reasoner") and result.get("findings"):  # Check if findings exist
+                        findings = result["findings"] or [{"content": "No specific information found.", 
+                                                       "metadata": {"source": "General Knowledge"}}]
+                        # Only process if we have findings
+                        if findings:
                             step_reasoning = self.agents["reasoner"].reason(query, result["step"], findings)
                             reasoning_steps.append(step_reasoning)
-                    except Exception as e:
-                        logger.error(f"Error reasoning about step '{result['step']}': {str(e)}")
-                        # Add partial result if reasoning fails
-                        if result["findings"]:
-                            reasoning_steps.append(f"Step {result['step']}: Based on the available information, "
-                                                  f"{result['findings'][0]['content'][:200]}...")
+                except Exception as e:
+                    logger.error(f"Error reasoning about step '{result['step']}': {str(e)}")
+                    # Add a fallback reasoning if the step fails
+                    reasoning_steps.append(f"For {result['step']}, insufficient information was found.")
+
+            # Check if we have any reasoning steps before synthesis
+            if not reasoning_steps:
+                logger.warning("No valid reasoning steps generated. Using general response.")
+                return self._generate_general_response(query)
             
             # Step 4: Synthesize final answer with explicit formatting instructions
             logger.info("Step 4: Synthesis")
@@ -247,17 +244,31 @@ class OCIRAGAgent:
             return self._generate_general_response(query)
     
     def _remove_latex_formatting(self, text: str) -> str:
-        """Remove LaTeX-style formatting from the text"""
+        """Remove LaTeX-style formatting from the text using regex for more robust cleaning"""
         if not text:
             return text
         
-        # Remove LaTeX-style boxed formatting
-        text = text.replace("$\\boxed{", "").replace("\\boxed{", "").replace("}$", "").replace("}", "")
+        import re
         
-        # Remove any remaining dollar signs or backslashes
-        text = text.replace("$", "").replace("\\", "")
+        # Use regex to clean boxed expressions and other LaTeX patterns
+        patterns = [
+            (r'\$\\boxed\{([^}]+)\}\$', r'\1'),  # $\boxed{text}$
+            (r'\$\\boxed\{([^}]+)\}', r'\1'),    # $\boxed{text}
+            (r'\\boxed\{([^}]+)\}\$', r'\1'),    # \boxed{text}$
+            (r'\\boxed\{([^}]+)\}', r'\1'),      # \boxed{text}
+            (r'boxed\{([^}]+)\}', r'\1'),        # boxed{text} without backslash
+        ]
         
-        return text.strip()
+        result = text
+        for pattern, replacement in patterns:
+            result = re.sub(pattern, replacement, result)
+        
+        # Remove any remaining LaTeX indicators
+        result = result.replace('$', '')
+        result = result.replace('\\', '')
+        result = result.replace('boxed{', '').replace('}', '')
+        
+        return result.strip()
     
     def _process_query_standard(self, query: str) -> Dict[str, Any]:
         """Process query using standard approach without Chain of Thought"""
@@ -634,6 +645,13 @@ def main():
         print("=" * 50)
         
         response = agent.process_query(args.query)
+        
+        # In the main function, add this check before printing the answer
+        if "The final answer is:" in response["answer"]:
+            # Extract only what follows "The final answer is:"
+            response["answer"] = re.sub(r'.*The final answer is:\s*', '', response["answer"])
+            # Remove any remaining LaTeX formatting
+            response["answer"] = agent._remove_latex_formatting(response["answer"])
         
         print("\nResponse:")
         print("-" * 50)
