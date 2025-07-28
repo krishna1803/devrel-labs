@@ -112,7 +112,7 @@ class ResearchAgent(Agent):
             vector_store=vector_store
         )
 
-    def research(self, query: str, step: str, max_chunks: int = 3, max_findings: int = 3, max_tokens: int = 500) -> List[Dict[str, Any]]:
+    def research(self, query: str, step: str, max_chunks: int = 3, max_findings: int = 3, max_tokens: int = 1000) -> List[Dict[str, Any]]:
         logger.info(f"\n🔍 Researching for step: {step}")
         
         # Query all collections with limits

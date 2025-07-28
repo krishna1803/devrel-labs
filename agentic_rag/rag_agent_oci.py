@@ -55,7 +55,7 @@ class OCIRAGAgent:
     def __init__(self, vector_store: OracleDBVectorStore, use_cot: bool = False, collection: str = None, skip_analysis: bool = False,
                  model_id: str = "cohere.command-latest", compartment_id: str = None, use_stream:bool = False,max_chunks_per_step: int = 2,
                  max_findings_per_step: int = 3, 
-                 max_tokens_per_finding: int = 500):
+                 max_tokens_per_finding: int = 1000):
         """Initialize RAG agent with vector store and OCI Generative AI"""
         self.vector_store = vector_store
         if vector_store is OracleDBVectorStore:
@@ -151,7 +151,7 @@ class OCIRAGAgent:
                 logger.info("Using General Knowledge collection, no context retrieval needed")
             
             # Apply token budget to context
-            initial_context = self._limit_context(initial_context, max_tokens=6000)
+            initial_context = self._limit_context(initial_context, max_tokens=12000)
             
             # Step 1: Planning - Get steps to follow
             logger.info("Step 1: Planning")
@@ -384,7 +384,7 @@ Answer the question based on the context provided. If the answer is not in the c
             "context": []
         }
     
-    def _limit_context(self, documents: List[Dict[str, Any]], max_tokens: int = 6000) -> List[Dict[str, Any]]:
+    def _limit_context(self, documents: List[Dict[str, Any]], max_tokens: int = 12000) -> List[Dict[str, Any]]:
         """Limit context to fit within a token budget"""
         if not documents:
             return []
@@ -567,8 +567,8 @@ def main():
                         help="Maximum chunks per research step (default: 2)")
     parser.add_argument("--max-findings-per-step", type=int, default=3, 
                         help="Maximum findings per research step (default: 3)")
-    parser.add_argument("--max-tokens-per-finding", type=int, default=500, 
-                        help="Maximum tokens per finding (default: 500)")
+    parser.add_argument("--max-tokens-per-finding", type=int, default=1000, 
+                        help="Maximum tokens per finding (default: 1000)")
 
     args = parser.parse_args()
     
