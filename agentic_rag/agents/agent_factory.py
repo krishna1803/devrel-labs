@@ -51,7 +51,7 @@ class Agent(BaseModel):
         if len(response) > 500:
             truncated_response = response[:500] + "... [response truncated]"
             logger.info(f"\n{'='*80}\n{prefix} Response:\n{'-'*40}\n{truncated_response}\n{'='*80}")
-            logger.info(f"Full response is : \n{'-'*40}\n{response}\n{'='*80}")
+            logger.info(f"Full response is : \n{'-'*40}\n{response}\n{'='*40}")
         else:
             logger.info(f"\n{'='*80}\n{prefix} Response:\n{'-'*40}\n{response}\n{'='*80}")
 
@@ -74,15 +74,15 @@ class PlannerAgent(Agent):
             Context: {context}
             Query: {query}
             
-            Steps:"""
+            Steps: Provide the steps in plain text format. DO NOT use LaTeX or special formatting."""
             context_str = "\n\n".join([f"Context {i+1}:\n{item['content']}" for i, item in enumerate(context)])
             logger.info(f"Using context ({len(context)} items)")
         else:
             template = """As a strategic planner, break down this problem into 3-4 clear steps.
             
             Query: {query}
-            
-            Steps:"""
+
+            Steps: Provide the steps in plain text format. DO NOT use LaTeX or special formatting."""
             context_str = ""
             logger.info("No context available")
             
@@ -187,8 +187,8 @@ class ReasoningAgent(Agent):
         Step: {step}
         Context: {context}
         Query: {query}
-        
-        Conclusion:"""
+
+        Conclusion: Provide the conclusion in plain text format. DO NOT use LaTeX or special formatting."""
         
         # Create context string but don't log it
         context_str = "\n\n".join([f"Context {i+1}:\n{item['content']}" for i, item in enumerate(context)])
@@ -218,6 +218,11 @@ class SynthesisAgent(Agent):
     def synthesize(self, query: str, reasoning_steps: List[str]) -> str:
         logger.info(f"\n📝 Synthesizing final answer from {len(reasoning_steps)} reasoning steps")
         
+        # Validate reasoning steps before synthesis
+        if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
+            logger.warning("Invalid reasoning steps detected. Falling back to general response.")
+            return self._generate_general_response(query)
+        
         template = """Combine the reasoning steps into a clear, comprehensive answer.
     
     Query: {query}
@@ -243,7 +248,26 @@ class SynthesisAgent(Agent):
         # Log what we got back
         self.log_response(response.content, f"Synthesizer ({duration:.2f}s)")
     
-        return response.content
+        final_answer = self._remove_latex_formatting(response.content)
+        if not final_answer.strip():
+            logger.warning("Final answer is empty after processing. Returning fallback response.")
+            return "Unable to generate a valid response based on the reasoning steps."
+
+        logger.info(f"Final synthesized answer:\n{final_answer}")
+        return final_answer
+
+    def _remove_latex_formatting(self, text: str) -> str:
+        """Remove LaTeX-style formatting from the text"""
+        if not text:
+            return text
+        
+        # Remove LaTeX-style boxed formatting
+        text = text.replace("$\\boxed{", "").replace("\\boxed{", "").replace("}$", "").replace("}", "")
+        
+        # Remove any remaining dollar signs or backslashes
+        text = text.replace("$", "").replace("\\", "")
+        
+        return text.strip()
 
 def create_agents(llm, vector_store=None):
     """Create and return the set of specialized agents"""
