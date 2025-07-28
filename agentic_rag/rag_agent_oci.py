@@ -211,13 +211,23 @@ class OCIRAGAgent:
             # Step 4: Synthesize final answer with explicit formatting instructions
             logger.info("Step 4: Synthesis")
             # Before synthesis
-            logger.info(f"Reasoning steps provided to synthesizer:\n{reasoning_steps}")
-            if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
-                logger.error("Invalid reasoning steps detected. Falling back to general response.")
+            logger.info(f"Reasoning steps count: {len(reasoning_steps)}")
+            if not reasoning_steps:
+                logger.error("No reasoning steps available for synthesis")
                 return self._generate_general_response(query)
-
+                
+            # Add debug info
+            for i, step in enumerate(reasoning_steps):
+                logger.info(f"Reasoning step {i+1} type: {type(step)}, length: {len(str(step))}")
+            
             try:
                 final_answer = self.agents["synthesizer"].synthesize(query, reasoning_steps)
+                
+                # Add explicit null check
+                if not final_answer:
+                    logger.error("Empty response from synthesizer")
+                    final_answer = "I was unable to generate a complete answer based on the available information."
+                
                 # Remove LaTeX formatting from final answer
                 final_answer = self._remove_latex_formatting(final_answer)
                 logger.info(f"Final synthesized answer generated")
@@ -228,6 +238,8 @@ class OCIRAGAgent:
                 }
             except Exception as e:
                 logger.error(f"Error in synthesis step: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())  # Print full stack trace
                 # Emergency fallback - join reasoning steps directly
                 fallback_answer = "\n\n".join([
                     f"Step {i+1}: {step[:200]}..." 
@@ -539,43 +551,6 @@ Provide your analysis for each step separately:
             
         return reasoning_steps
 
-    def synthesize(self, query: str, reasoning_steps: List[str]) -> str:
-        logger.info(f"\n📝 Synthesizing final answer from {len(reasoning_steps)} reasoning steps")
-        
-        # Validate reasoning steps
-        if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
-            logger.error("Invalid reasoning steps provided to synthesizer. Falling back to general response.")
-            return "Unable to synthesize a response due to invalid reasoning steps."
-        
-        template = """Combine the reasoning steps into a clear, comprehensive answer.
-    
-    Query: {query}
-    Steps: {steps}
-    
-    Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
-    
-    Answer:"""
-        
-        steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
-        prompt = ChatPromptTemplate.from_template(template)
-        messages = prompt.format_messages(query=query, steps=steps_str)
-        
-        # Log what we're sending to the LLM
-        prompt_text = "\n".join([msg.content for msg in messages])
-        self.log_prompt(prompt_text, "Synthesizer")
-        
-        # Time the execution
-        start_time = time.time()
-        try:
-            response = self.llm.invoke(messages)
-            if hasattr(response, "content"):
-                return response.content
-            else:
-                logger.error("LLM response does not contain 'content'. Falling back to general response.")
-                return "Unable to generate a response due to unexpected LLM output."
-        except Exception as e:
-            logger.error(f"Error during LLM invocation: {str(e)}")
-            return "An error occurred while generating the response."
 
 def main():
     parser = argparse.ArgumentParser(description="Query documents using OCI Generative AI")

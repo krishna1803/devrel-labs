@@ -233,67 +233,50 @@ class SynthesisAgent(Agent):
         # Validate reasoning steps before synthesis
         if not reasoning_steps or not all(isinstance(step, str) and step.strip() for step in reasoning_steps):
             logger.warning("Invalid reasoning steps detected. Falling back to general response.")
-            return self._generate_general_response(query)
+            return "I don't have enough valid analysis to provide a complete answer."
         
         template = """Combine the reasoning steps into a clear, comprehensive answer.
+
+Query: {query}
+Steps: {steps}
+
+Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
+
+Answer:"""
     
-    Query: {query}
-    Steps: {steps}
-    
-    Provide your final answer in plain text format. DO NOT use LaTeX notation, mathematical symbols like \boxed{}, or markdown formatting in your answer.
-    
-    Answer:"""
-        
         steps_str = "\n\n".join([f"Step {i+1}:\n{step}" for i, step in enumerate(reasoning_steps)])
         prompt = ChatPromptTemplate.from_template(template)
         messages = prompt.format_messages(query=query, steps=steps_str)
-    
+
         # Log what we're sending to the LLM
         prompt_text = "\n".join([msg.content for msg in messages])
         self.log_prompt(prompt_text, "Synthesizer")
-    
-        # Time the execution
+
+        # Time the execution with robust error handling
         start_time = time.time()
-        response = self.llm.invoke(messages)
-        duration = time.time() - start_time
-    
-        # Log what we got back
-        self.log_response(response.content, f"Synthesizer ({duration:.2f}s)")
-    
-        final_answer = self._remove_latex_formatting(response.content)
-        if not final_answer.strip():
-            logger.warning("Final answer is empty after processing. Returning fallback response.")
-            return "Unable to generate a valid response based on the reasoning steps."
-
-        logger.info(f"Final synthesized answer:\n{final_answer}")
-        return final_answer
-
-    def _remove_latex_formatting(self, text: str) -> str:
-        """Remove LaTeX-style formatting from the text using regex for more robust cleaning"""
-        if not text:
-            return text
-        
-        import re
-        
-        # Use regex to clean boxed expressions and other LaTeX patterns
-        patterns = [
-            (r'\$\\boxed\{([^}]+)\}\$', r'\1'),  # $\boxed{text}$
-            (r'\$\\boxed\{([^}]+)\}', r'\1'),    # $\boxed{text}
-            (r'\\boxed\{([^}]+)\}\$', r'\1'),    # \boxed{text}$
-            (r'\\boxed\{([^}]+)\}', r'\1'),      # \boxed{text}
-            (r'boxed\{([^}]+)\}', r'\1'),        # boxed{text} without backslash
-        ]
-        
-        result = text
-        for pattern, replacement in patterns:
-            result = re.sub(pattern, replacement, result)
-        
-        # Remove any remaining LaTeX indicators
-        result = result.replace('$', '')
-        result = result.replace('\\', '')
-        result = result.replace('boxed{', '').replace('}', '')
-        
-        return result.strip()
+        try:
+            response = self.llm.invoke(messages)
+            duration = time.time() - start_time
+            
+            # Handle different response formats
+            if hasattr(response, "content"):
+                result = response.content
+            elif isinstance(response, dict) and "content" in response:
+                result = response["content"]
+            elif isinstance(response, str):
+                result = response
+            else:
+                # Last resort - convert to string
+                logger.warning(f"Unexpected response type: {type(response)}")
+                result = str(response)
+                
+            self.log_response(result, f"Synthesizer ({duration:.2f}s)")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in synthesis: {str(e)}, {type(e)}")
+            # Create fallback response from reasoning steps
+            return f"Based on the analysis, {reasoning_steps[0][:200]}..."
 
 def create_agents(llm, vector_store=None):
     """Create and return the set of specialized agents"""
