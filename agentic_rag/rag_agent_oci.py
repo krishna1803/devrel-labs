@@ -124,7 +124,7 @@ class OCIRAGAgent:
                     pages = chunk["metadata"].get("page_numbers", [])
                     logger.info(f"Source [{i+1}]: {source} (pages: {pages})")
                     content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+                    logger.info(f"Content preview for source [{i+1}]: {content_preview}")
             elif self.collection == "Repository Collection":
                 logger.info(f"Retrieving context from Repository Collection for query: '{query}'")
                 repo_context = self.vector_store.query_repo_collection(query)
@@ -135,7 +135,7 @@ class OCIRAGAgent:
                     file_path = chunk["metadata"].get("file_path", "Unknown")
                     logger.info(f"Source [{i+1}]: {source} (file: {file_path})")
                     content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+                    logger.info(f"Content preview for source [{i+1}]: {content_preview}")
             elif self.collection == "Web Knowledge Base":
                 logger.info(f"Retrieving context from Web Knowledge Base for query: '{query}'")
                 web_context = self.vector_store.query_web_collection(query)
@@ -146,7 +146,7 @@ class OCIRAGAgent:
                     title = chunk["metadata"].get("title", "Unknown")
                     logger.info(f"Source [{i+1}]: {source} (title: {title})")
                     content_preview = chunk["content"][:150] + "..." if len(chunk["content"]) > 150 else chunk["content"]
-                    logger.debug(f"Content preview for source [{i+1}]: {content_preview}")
+                    logger.info(f"Content preview for source [{i+1}]: {content_preview}")
             else:
                 logger.info("Using General Knowledge collection, no context retrieval needed")
             
