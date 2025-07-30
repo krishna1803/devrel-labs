@@ -11,7 +11,7 @@ embeddings = OllamaEmbeddings(model="llama3.3")
 
 # See docker command above to launch a postgres instance with pgvector enabled.
 connection = "postgresql+psycopg://langchain:langchain@localhost:6024/langchain"  # Uses psycopg3!
-collection_name = "my_docs"
+collection_name = "PDF Collection"
 
 vector_store = PGVector(
     embeddings=embeddings,
@@ -91,14 +91,35 @@ def similarity_search_with_retriever(query, k=3):
         print(f"Metadata: {result.metadata}")
     return results
 
+def query_postgres(query, k=3):
+    """Query the PostgreSQL vector store directly using SQL"""
+    with vector_store.client.engine.connect() as conn:
+        sql = text(f"""
+            SELECT id, page_content, metadata
+            FROM {vector_store.collection_name}
+            ORDER BY embedding <-> :query_embedding
+            LIMIT :k
+        """)
+        results = conn.execute(sql, {"query_embedding": embeddings.embed_query(query), "k": k}).fetchall()
+        
+        # Format results
+        formatted_results = []
+        for row in results:
+            formatted_results.append({
+                "id": row.id,
+                "content": row.page_content,
+                "metadata": row.metadata
+            })
+        
+        return formatted_results
 
 def main():
     add_docs()
     query = "What animals are found in the pond?"
-    similarity_search(query)
-    similarity_search_with_retriever(query)
-    
-        
-        
+    #similarity_search(query)
+    #similarity_search_with_retriever(query)
+
+    query_postgres("What is Naman case?", k=3)
+
 if __name__ == "__main__":
     main()        
