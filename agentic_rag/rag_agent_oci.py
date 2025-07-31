@@ -576,7 +576,7 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
 
         compartment_id  = credentials.get("OCI_COMPARTMENT_ID", "")
         collection = credentials.get("COLLECTION", "PDF Collection")
-        model_id = request["model_id"] or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
+        model_id = request["model"] or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
         vector_db = credentials.get("VECTOR_DB", "postgres")
         use_cot = request["use_cot"] or credentials.get("USE_COT", "False")
 
