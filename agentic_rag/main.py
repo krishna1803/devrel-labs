@@ -156,6 +156,7 @@ async def query(request: QueryRequest):
                     else:
                         raise e"""
             
+        print(f"\nProcessing query: {request.query} with model: {request.model or 'default'} and use_cot: {request.use_cot}")
         requestdict = {}
         if request.use_cot:
             requestdict["use_cot"] = True
@@ -163,15 +164,16 @@ async def query(request: QueryRequest):
             requestdict["use_cot"] = False
         # Set model based on request or default to a specific model
         if request.model:
-            requestdict["model_id"] = request.model_id
+            requestdict["model"] = request.model
         else:
-            requestdict["model_id"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
+            requestdict["model"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
 
         if request.query is None or request.query.strip() == "":
             raise HTTPException(status_code=400, detail="Query cannot be empty")
 
         requestdict["query"] = request.query
-        
+        # Process the request using the RAG agent
+        print(f"\nRequest dictionary: {requestdict}")
         response = process_request(requestdict)
         
         if not response:
