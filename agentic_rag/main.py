@@ -8,7 +8,9 @@ import uuid
 
 from pdf_processor import PDFProcessor
 from store import VectorStore
-from local_rag_agent import LocalRAGAgent
+from rag_agent_oci import LocalRAGAgent
+
+from local_rag_agent import OCIRagAgent
 from rag_agent import RAGAgent
 
 # Load environment variables
@@ -33,6 +35,7 @@ app.add_middleware(
 # Initialize components
 pdf_processor = PDFProcessor()
 vector_store = VectorStore()
+    
 
 # Check for Ollama availability
 try:
@@ -119,24 +122,28 @@ async def query(request: QueryRequest):
     """Process a query using the RAG agent"""
     try:
         # Determine which model to use
-        if request.model:
+        """if request.model:
             if request.model.startswith("ollama:") and ollama_available:
                 # Use specified Ollama model
                 rag_agent = LocalRAGAgent(vector_store=vector_store, model_name=request.model, use_cot=request.use_cot)
             elif request.model == "openai" and openai_api_key:
                 # Use OpenAI
                 rag_agent = RAGAgent(vector_store=vector_store, openai_api_key=openai_api_key, use_cot=request.use_cot)
+                response = rag_agent.process_query(request.query)
             else:
                 # Use default local model
                 rag_agent = LocalRAGAgent(vector_store=vector_store, use_cot=request.use_cot)
+                response = rag_agent.process_query(request.query)
         else:
             # Reinitialize agent with CoT setting using default model
             if openai_api_key:
                 rag_agent = RAGAgent(vector_store=vector_store, openai_api_key=openai_api_key, use_cot=request.use_cot)
+                response = rag_agent.process_query(request.query)
             else:
                 # Try local Mistral first
                 try:
                     rag_agent = LocalRAGAgent(vector_store=vector_store, use_cot=request.use_cot)
+                    response = rag_agent.process_query(request.query)
                 except Exception as e:
                     print(f"Failed to initialize local Mistral model: {str(e)}")
                     # Fall back to Ollama if available
@@ -146,9 +153,27 @@ async def query(request: QueryRequest):
                         except Exception as e2:
                             raise Exception(f"Failed to initialize any model: {str(e2)}")
                     else:
-                        raise e
+                        raise e"""
             
-        response = rag_agent.process_query(request.query)
+        requestdict = {}
+        if request.use_cot:
+            requestdict["use_cot"] = True
+        else:
+            requestdict["use_cot"] = False
+        # Set model based on request or default to a specific model
+        if request.model:
+            requestdict["model"] = request.model
+        else:
+            requestdict["model"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
+            
+        if request.query is None or request.query.strip() == "":
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+        requestdict["query"] = request.query
+        
+        response = rag_agent.process_request(requestdict)
+        if not response:
+            raise HTTPException(status_code=404, detail="No results found for the query")
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

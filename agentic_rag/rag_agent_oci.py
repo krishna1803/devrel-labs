@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import yaml
 
 # OCI imports
 import oci
@@ -551,6 +553,58 @@ Provide your analysis for each step separately:
             
         return reasoning_steps
 
+def load_config() -> Dict[str, str]:
+        """Load configuration from config_oci.yaml"""
+        try:
+            config_path = Path("config_oci.yaml")
+            if not config_path.exists():
+                print("Warning: config_oci.yaml not found. Using empty configuration.")
+                return {}
+                
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            return config if config else {}
+        except Exception as e:
+            print(f"Warning: Error loading config: {str(e)}")
+            return {}
+
+def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Process a query request using the RAG agent"""
+    try:
+          # Load Postgres DB credentials from config_pg.yaml
+        credentials = load_config()
+
+        compartment_id  = credentials.get("OCI_COMPARTMENT_ID", "")
+        collection = credentials.get("COLLECTION", "PDF Collection")
+        model_id = request["model_id"] or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
+        vector_db = credentials.get("VECTOR_DB", "postgres")
+        use_cot = request["use_cot"] or credentials.get("USE_COT", "False")
+
+        # Check for OCI compartment ID
+        if not compartment_id:
+            print("✗ Error: OCI_COMPARTMENT_ID not found in config file or command line arguments")
+            print("Please set the OCI_COMPARTMENT_ID in config file or provide --compartment-id")
+            exit(1)
+            # Determine which model to use
+    
+            # Use default OCI model
+        rag_agent = OCIRAGAgent(
+                vector_store=vector_db,
+                use_cot=use_cot,
+                collection=collection,
+                model_id=model_id,
+                compartment_id=compartment_id,
+                use_stream=False,
+                max_chunks_per_step=2,
+                max_findings_per_step=3,
+                max_tokens_per_finding=1000
+            )
+        
+        response = rag_agent.process_query(request["query"])
+        return response
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
+        return {"error": str(e)}
 
 def main():
     parser = argparse.ArgumentParser(description="Query documents using OCI Generative AI")
@@ -576,11 +630,19 @@ def main():
     # Load environment variables
     load_dotenv()
     
+     # Load Postgres DB credentials from config_pg.yaml
+    credentials = load_config()
+
+    compartment_id  = args.compartment_id or credentials.get("OCI_COMPARTMENT_ID", "")
+    collection = args.collection or credentials.get("COLLECTION", "PDF Collection")
+    model_id = args.model_id or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
+    vector_db = args.vector_db or credentials.get("VECTOR_DB", "postgres")
+    use_cot = args.use_cot or credentials.get("USE_COT", "false").lower() == "true"
+
     # Check for OCI compartment ID
-    compartment_id = args.compartment_id or os.getenv("OCI_COMPARTMENT_ID")
     if not compartment_id:
-        print("✗ Error: OCI_COMPARTMENT_ID not found in environment variables or command line arguments")
-        print("Please set the OCI_COMPARTMENT_ID environment variable or provide --compartment-id")
+        print("✗ Error: OCI_COMPARTMENT_ID not found in config file or command line arguments")
+        print("Please set the OCI_COMPARTMENT_ID in config file or provide --compartment-id")
         exit(1)
     
     print("\nInitializing RAG agent...")
@@ -605,9 +667,9 @@ def main():
             
         agent = OCIRAGAgent(
             store,
-            use_cot=args.use_cot,
-            collection=args.collection,
-            model_id=args.model_id,
+            use_cot=use_cot,
+            collection=collection,
+            model_id=model_id,
             compartment_id=compartment_id,
             use_stream=args.use_stream,
             max_chunks_per_step=args.max_chunks_per_step,
