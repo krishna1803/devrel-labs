@@ -8,9 +8,9 @@ import uuid
 
 from pdf_processor import PDFProcessor
 from store import VectorStore
-from rag_agent_oci import LocalRAGAgent
+from rag_agent_oci import OCIRAGAgent
 
-from local_rag_agent import OCIRagAgent
+from local_rag_agent import LocalRAGAgent
 from rag_agent import RAGAgent
 
 # Load environment variables
@@ -76,13 +76,13 @@ else:
 
 class QueryRequest(BaseModel):
     query: str
-    use_cot: bool = False
+    use_cot: Optional[str] = False
     model: Optional[str] = None  # Allow specifying model in the request
 
 class QueryResponse(BaseModel):
     answer: str
     reasoning: Optional[str] = None
-    context: List[dict]
+    context: List[dict] = []
 
 @app.post("/upload/pdf")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -180,4 +180,5 @@ async def query(request: QueryRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    print("Starting Agentic RAG API...")
     uvicorn.run(app, host="0.0.0.0", port=8000) 
