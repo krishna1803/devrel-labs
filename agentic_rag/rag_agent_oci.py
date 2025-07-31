@@ -585,7 +585,22 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
             print("✗ Error: OCI_COMPARTMENT_ID not found in config file or command line arguments")
             print("Please set the OCI_COMPARTMENT_ID in config file or provide --compartment-id")
             exit(1)
-            # Determine which model to use
+            # Determine which model to us
+        #Create vector store based on vector_db type
+        if vector_db == "oracle":
+            if not ORACLE_DB_AVAILABLE:
+                print("✗ Error: Oracle DB support is not available. Install with: pip install oracledb sentence-transformers")
+                exit(1)
+            # Initialize Oracle DB Vector Store
+            vector_db = OracleDBVectorStore(collection_name=collection)
+        else:   
+            # Initialize Postgres Vector Store (assuming similar interface)
+            from PostgresVectorStore import PostgresVectorStore
+            print("Using Postgres Vector Store")
+            vector_db = PostgresVectorStore(collection_name=collection) 
+        if not vector_db:
+            print("✗ Error: Failed to initialize vector store")
+            exit(1)   
     
             # Use default OCI model
         rag_agent = OCIRAGAgent(
@@ -601,6 +616,40 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
             )
         
         response = rag_agent.process_query(request["query"])
+        # In the main function, add this check before printing the answer
+        if "The final answer is:" in response["answer"]:
+            # Extract only what follows "The final answer is:"
+            response["answer"] = re.sub(r'.*The final answer is:\s*', '', response["answer"])
+            # Remove any remaining LaTeX formatting
+            response["answer"] = agent._remove_latex_formatting(response["answer"])
+        
+        print("\nResponse:")
+        print("-" * 50)
+        print(response["answer"])
+        if response.get("reasoning_steps"):
+            print("\nReasoning Steps:")
+            print("-" * 50)
+            for i, step in enumerate(response["reasoning_steps"]):
+                print(f"\nStep {i+1}:")
+                print(step)
+        
+        if response.get("context"):
+            print("\nSources used:")
+            print("-" * 50)
+            
+            # Print concise list of sources
+            for i, ctx in enumerate(response["context"]):
+                source = ctx["metadata"].get("source", "Unknown")
+                if "page_numbers" in ctx["metadata"]:
+                    pages = ctx["metadata"].get("page_numbers", [])
+                    print(f"[{i+1}] {source} (pages: {pages})")
+                else:
+                    file_path = ctx["metadata"].get("file_path", "Unknown")
+                    print(f"[{i+1}] {source} (file: {file_path})")
+                
+               
+        # Return the response dictionary
+        
         return response
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
