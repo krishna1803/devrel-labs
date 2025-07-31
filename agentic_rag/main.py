@@ -82,7 +82,7 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
-    reasoning: Optional[str] = None
+    reasoning: List[dict] = []
     context: List[dict] = []
 
 @app.post("/upload/pdf")

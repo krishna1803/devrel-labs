@@ -696,14 +696,26 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
         if response.get("reasoning_steps"):
             print("\nReasoning Steps:")
             print("-" * 50)
+            # Initialize reasoning dictionary if not present
+            if "reasoning" not in response:
+                response["reasoning"] = {}
+                
             for i, step in enumerate(response["reasoning_steps"]):
                 print(f"\nStep {i+1}:")
                 print(step)
-                #Add the Reasoning Steps and content to the response[reasoning]
-                if isinstance(step, str):
-                    response["reasoning"][i] = step.strip()
+                
+                # Convert step to string based on its type
+                if isinstance(step, list):
+                    response["reasoning"][str(i)] = " ".join([s.strip() for s in step if isinstance(s, str)])
+                elif isinstance(step, dict):
+                    response["reasoning"][str(i)] = " ".join([str(v).strip() for v in step.values() if isinstance(v, str)])
+                elif isinstance(step, str):
+                    # Handle the most common case - string
+                    response["reasoning"][str(i)] = step.strip()
                 else:
-                    response["reasoning"][i] = str(step).strip()
+                    # Fallback for any other type
+                    response["reasoning"][str(i)] = str(step).strip()
+
         
         if response.get("context"):
             print("\nSources used:")
@@ -818,6 +830,10 @@ def main():
         if response.get("reasoning_steps"):
             print("\nReasoning Steps:")
             print("-" * 50)
+            # Initialize reasoning dictionary if not present
+            if "reasoning" not in response:
+                response["reasoning"] = {}
+                
             for i, step in enumerate(response["reasoning_steps"]):
                 print(f"\nStep {i+1}:")
                 print(step)
