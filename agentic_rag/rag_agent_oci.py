@@ -7,6 +7,7 @@ import logging
 from dotenv import load_dotenv
 import time
 import asyncio
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import yaml
@@ -176,15 +177,29 @@ class OCIRAGAgent:
                 logger.info(f"Limiting plan from {len(plan_steps)} steps to 3 steps")
                 plan_steps = plan_steps[:3]
             
-            # Use asyncio to run research steps in parallel
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Check if we're already in an event loop
             try:
-                research_results = loop.run_until_complete(
-                    self._research_steps_parallel(query, plan_steps)
+                existing_loop = asyncio.get_running_loop()
+                logger.info("Using existing event loop")
+                
+                # Use run_coroutine_threadsafe when in existing loop
+                future = asyncio.run_coroutine_threadsafe(
+                    self._research_steps_parallel(query, plan_steps),
+                    existing_loop
                 )
-            finally:
-                loop.close()
+                research_results = future.result()
+                
+            except RuntimeError:
+                # No event loop running, create a new one
+                logger.info("Creating new event loop")
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    research_results = loop.run_until_complete(
+                        self._research_steps_parallel(query, plan_steps)
+                    )
+                finally:
+                    loop.close()
                 
             # Step 3: Batch reasoning for better efficiency
             logger.info("Step 3: Reasoning (batch processing)")
