@@ -78,7 +78,7 @@ else:
 class QueryRequest(BaseModel):
     query: str
     use_cot: Optional[str] = False
-    model: Optional[str] = None  # Allow specifying model in the request
+    model_id: Optional[str] = None  # Allow specifying model in the request
 
 class QueryResponse(BaseModel):
     answer: str
@@ -163,10 +163,10 @@ async def query(request: QueryRequest):
             requestdict["use_cot"] = False
         # Set model based on request or default to a specific model
         if request.model:
-            requestdict["model"] = request.model
+            requestdict["model_id"] = request.model
         else:
-            requestdict["model"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
-            
+            requestdict["model_id"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
+
         if request.query is None or request.query.strip() == "":
             raise HTTPException(status_code=400, detail="Query cannot be empty")
 
