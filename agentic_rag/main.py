@@ -12,6 +12,7 @@ from rag_agent_oci import OCIRAGAgent
 
 from local_rag_agent import LocalRAGAgent
 from rag_agent import RAGAgent
+from rag_agent_oci import process_request
 
 # Load environment variables
 load_dotenv()
@@ -171,7 +172,8 @@ async def query(request: QueryRequest):
 
         requestdict["query"] = request.query
         
-        response = rag_agent.process_request(requestdict)
+        response = process_request(requestdict)
+        
         if not response:
             raise HTTPException(status_code=404, detail="No results found for the query")
         return response
