@@ -642,7 +642,8 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
         collection = credentials.get("COLLECTION", "PDF Collection")
         model_id = request["model"] or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
         vector_db = credentials.get("VECTOR_DB", "postgres")
-        use_cot = request["use_cot"]
+        #Convert use_cot string to bool value when creating the OCI RAG Agent
+        use_cot = request["use_cot"] or credentials.get("USE_COT", "false").lower() == "true"
 
         # Check for OCI compartment ID
         if not compartment_id:
@@ -667,6 +668,8 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
             exit(1)   
     
             # Use default OCI model
+        logger.info(f"Using model: {model_id} for collection: {collection} and compartment: {compartment_id} and use_cot {use_cot}")
+        # Initialize the RAG agent with the vector store and model    
         rag_agent = OCIRAGAgent(
                 vector_store=vector_db,
                 use_cot=use_cot,
@@ -696,6 +699,11 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
             for i, step in enumerate(response["reasoning_steps"]):
                 print(f"\nStep {i+1}:")
                 print(step)
+                #Add the Reasoning Steps and content to the response[reasoning]
+                if isinstance(step, str):
+                    response["reasoning"][i] = step.strip()
+                else:
+                    response["reasoning"][i] = str(step).strip()
         
         if response.get("context"):
             print("\nSources used:")
