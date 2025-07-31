@@ -696,25 +696,30 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
         if response.get("reasoning_steps"):
             print("\nReasoning Steps:")
             print("-" * 50)
-            # Initialize reasoning dictionary if not present
-            if "reasoning" not in response:
-                response["reasoning"] = {}
-                
+            # Initialize reasoning as a list, not a dictionary
+            response["reasoning"] = []
+            
             for i, step in enumerate(response["reasoning_steps"]):
                 print(f"\nStep {i+1}:")
                 print(step)
                 
                 # Convert step to string based on its type
                 if isinstance(step, list):
-                    response["reasoning"][str(i)] = " ".join([s.strip() for s in step if isinstance(s, str)])
+                    step_text = " ".join([s.strip() for s in step if isinstance(s, str)])
                 elif isinstance(step, dict):
-                    response["reasoning"][str(i)] = " ".join([str(v).strip() for v in step.values() if isinstance(v, str)])
+                    step_text = " ".join([str(v).strip() for v in step.values() if isinstance(v, str)])
                 elif isinstance(step, str):
                     # Handle the most common case - string
-                    response["reasoning"][str(i)] = step.strip()
+                    step_text = step.strip()
                 else:
                     # Fallback for any other type
-                    response["reasoning"][str(i)] = str(step).strip()
+                    step_text = str(step).strip()
+                
+                # Add as a dictionary to the list (with step number and content)
+                response["reasoning"].append({
+                    "step": i+1,
+                    "content": step_text
+                })
 
         
         if response.get("context"):
@@ -830,10 +835,9 @@ def main():
         if response.get("reasoning_steps"):
             print("\nReasoning Steps:")
             print("-" * 50)
-            # Initialize reasoning dictionary if not present
-            if "reasoning" not in response:
-                response["reasoning"] = {}
-                
+            # Initialize reasoning as a list, not a dictionary
+            response["reasoning"] = []
+            
             for i, step in enumerate(response["reasoning_steps"]):
                 print(f"\nStep {i+1}:")
                 print(step)
