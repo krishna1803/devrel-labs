@@ -163,7 +163,7 @@ async def query(request: QueryRequest):
             requestdict["use_cot"] = False
         # Set model based on request or default to a specific model
         if request.model:
-            requestdict["model_id"] = request.model
+            requestdict["model_id"] = request.model_id
         else:
             requestdict["model_id"] = "meta.llama-4-maverick-17b-128e-instruct-fp8"
 
