@@ -170,37 +170,49 @@ class OCIRAGAgent:
                 logger.info("Falling back to general response")
                 return self._generate_general_response(query)
             
-            # Step 2: Research each step in parallel
+            # Step 2: Research each step (try parallel first, fall back to sequential)
             logger.info("Step 2: Research (parallel execution)")
             plan_steps = [step for step in plan.split("\n") if step.strip()]
             if len(plan_steps) > 3:
                 logger.info(f"Limiting plan from {len(plan_steps)} steps to 3 steps")
                 plan_steps = plan_steps[:3]
-            
-            # Check if we're already in an event loop
+
+            # Try to use parallel processing with proper safeguards
             try:
-                existing_loop = asyncio.get_running_loop()
-                logger.info("Using existing event loop")
+                logger.info("Attempting parallel research execution")
                 
-                # Use run_coroutine_threadsafe when in existing loop
-                future = asyncio.run_coroutine_threadsafe(
-                    self._research_steps_parallel(query, plan_steps),
-                    existing_loop
-                )
-                research_results = future.result()
-                
-            except RuntimeError:
-                # No event loop running, create a new one
-                logger.info("Creating new event loop")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # Check if we're already in an event loop
                 try:
-                    research_results = loop.run_until_complete(
-                        self._research_steps_parallel(query, plan_steps)
-                    )
-                finally:
-                    loop.close()
-                
+                    # Try to get the running loop but don't use run_coroutine_threadsafe
+                    existing_loop = asyncio.get_running_loop()
+                    logger.info("Existing event loop detected - switching to sequential processing for safety")
+                    
+                    # If we're in an event loop, use sequential processing instead
+                    # This avoids potential deadlocks with nested event loops
+                    research_results = self._research_steps_sequential(query, plan_steps)
+                    
+                except RuntimeError:
+                    # No event loop running, create a new one
+                    logger.info("Creating new event loop for parallel processing")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        # Add a timeout to prevent indefinite hanging
+                        research_results = loop.run_until_complete(
+                            asyncio.wait_for(
+                                self._research_steps_parallel(query, plan_steps),
+                                timeout=120  # 2 minute timeout
+                            )
+                        )
+                    finally:
+                        loop.close()
+                        logger.info("Event loop closed")
+            
+            except Exception as e:
+                logger.error(f"Error in parallel research: {str(e)}")
+                logger.info("Falling back to sequential research")
+                research_results = self._research_steps_sequential(query, plan_steps)
+            
             # Step 3: Batch reasoning for better efficiency
             logger.info("Step 3: Reasoning (batch processing)")
             reasoning_steps = []
@@ -473,36 +485,53 @@ Answer the question based on the context provided. If the answer is not in the c
         return limited_docs
 
     async def _research_steps_parallel(self, query: str, plan_steps: List[str]) -> List[Dict[str, Any]]:
-        """Process research steps in parallel"""
+        """Process research steps in parallel with improved error handling"""
+        # Create a single executor for all tasks
+        executor = ThreadPoolExecutor(max_workers=min(len(plan_steps), 3))
+    
         async def _research_single_step(step: str):
             try:
-                with ThreadPoolExecutor() as executor:
-                    return await asyncio.get_event_loop().run_in_executor(
-                        executor,
-                        self.agents["researcher"].research,
-                        query, step, 
-                        self.max_chunks_per_step,
-                        self.max_findings_per_step,
-                        self.max_tokens_per_finding
-                    )
+                # Use the executor passed from the parent function
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    executor,
+                    self.agents["researcher"].research,
+                    query, step, 
+                    self.max_chunks_per_step,
+                    self.max_findings_per_step,
+                    self.max_tokens_per_finding
+                )
+                return {"step": step, "findings": result}
             except Exception as e:
                 logger.error(f"Error researching step '{step}': {str(e)}")
                 return {"step": step, "findings": []}
+    
+        try:
+            # Create tasks for all steps
+            tasks = [_research_single_step(step) for step in plan_steps]
         
-        # Create tasks for all steps
-        tasks = [_research_single_step(step) for step in plan_steps]
+            # Execute all research tasks concurrently with timeout
+            results = await asyncio.gather(*tasks)
         
-        # Execute all research tasks concurrently
-        results = await asyncio.gather(*tasks)
+            # Process results
+            research_results = []
+            for result in results:
+                step = result["step"]
+                findings = result["findings"]
+                if isinstance(findings, list):
+                    research_results.append({"step": step, "findings": findings})
+                else:
+                    # Handle case where findings might be a dict with a 'findings' key
+                    findings_list = findings.get("findings", []) if isinstance(findings, dict) else []
+                    research_results.append({"step": step, "findings": findings_list})
+            
+                logger.info(f"Research for step: {step} - Found {len(findings) if isinstance(findings, list) else 0} findings")
         
-        # Organize results by step
-        research_results = []
-        for step, result in zip(plan_steps, results):
-            findings = result if isinstance(result, list) else result.get("findings", [])
-            research_results.append({"step": step, "findings": findings})
-            logger.info(f"Research for step: {step} - Found {len(findings)} findings")
-        
-        return research_results
+            return research_results
+    
+        finally:
+            # Always shut down the executor
+            executor.shutdown(wait=False)
 
     def _batch_reasoning(self, query: str, research_results: List[Dict[str, Any]]) -> List[str]:
         """Process multiple reasoning steps in a single batch"""
@@ -568,6 +597,26 @@ Provide your analysis for each step separately:
             
         return reasoning_steps
 
+    def _research_steps_sequential(self, query: str, plan_steps: List[str]) -> List[Dict[str, Any]]:
+        """Process research steps sequentially (no asyncio)"""
+        research_results = []
+        
+        for step in plan_steps:
+            try:
+                logger.info(f"Researching step: {step}")
+                findings = self.agents["researcher"].research(
+                    query, step, 
+                    self.max_chunks_per_step,
+                    self.max_findings_per_step,
+                    self.max_tokens_per_finding
+                )
+                research_results.append({"step": step, "findings": findings})
+                logger.info(f"Research for step: {step} - Found {len(findings) if isinstance(findings, list) else 0} findings")
+            except Exception as e:
+                logger.error(f"Error researching step '{step}': {str(e)}")
+                research_results.append({"step": step, "findings": []})
+        
+        return research_results
 def load_config() -> Dict[str, str]:
         """Load configuration from config_oci.yaml"""
         try:
