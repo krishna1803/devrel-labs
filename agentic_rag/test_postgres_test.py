@@ -147,6 +147,81 @@ def describe_tables(collection_name=collection_name):
     # Close the engine
     engine.dispose()
 
+def vector_similarity_search(query, collection_name="langchain_pg_collection", k=3):
+    """
+    Perform similarity search directly using PostgreSQL pgvector extension.
+    
+    Args:
+        query: The query string to search for
+        collection_name: Name of the collection in the database
+        k: Number of results to return
+        
+    Returns:
+        List of documents with content and metadata
+    """
+    # Get the embedding for the query using the same model that created the embeddings
+    query_embedding = embeddings.embed_query(query)
+    
+    # Create engine connection
+    engine = create_engine(connection)
+    
+    # Format the embedding vector as a PostgreSQL vector literal
+    embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+    
+    documents = []
+    
+    try:
+        with engine.begin() as conn:
+            # Step 1: Get the collection UUID for the given name
+            collection_query = text("""
+                SELECT uuid FROM public.langchain_pg_collection
+                WHERE name = :collection_name LIMIT 1
+            """)
+            collection_result = conn.execute(collection_query, {"collection_name": collection_name})
+            collection_row = collection_result.fetchone()
+            
+            if not collection_row:
+                print(f"Collection '{collection_name}' not found")
+                return []
+                
+            collection_uuid = collection_row[0]
+            
+            # Step 2: Perform the similarity search using vector operators
+            search_query = f"""
+                SELECT e.document, e.cmetadata
+                FROM public.langchain_pg_embedding e
+                WHERE e.collection_id = :collection_id
+                ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
+                LIMIT :k
+            """
+            
+            result = conn.execute(text(search_query), {"collection_id": collection_uuid, "k": k})
+            rows = result.fetchall()
+        
+            # Process the results
+            for row in rows:
+                document_content = row[0]
+                metadata = row[1] if row[1] else {}
+                
+                documents.append(Document(
+                    page_content=document_content,
+                    metadata=metadata
+                ))
+    
+    except Exception as e:
+        print(f"Error performing similarity search: {str(e)}")
+    finally:
+        engine.dispose()
+    
+    # Display results
+    print(f"\nDirect Vector Search: Found {len(documents)} results for query '{query}':")
+    for i, doc in enumerate(documents):
+        print(f"\nResult {i+1}:")
+        print(f"Content: {doc.page_content}")
+        print(f"Metadata: {doc.metadata}")
+    
+    return documents
+
 def main():
     # add_docs()
     query = "What is case between Naaman v Jaken Properties Australia Pty Limited?"
@@ -161,7 +236,9 @@ def main():
     similarity_search(query)
     similarity_search_with_retriever(query)
     
+    print("Using vector_similarity_search:")
+    vector_similarity_search(query)
         
 if __name__ == "__main__":
     main()
-   
+
