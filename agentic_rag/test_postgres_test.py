@@ -21,7 +21,7 @@ embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
 # See docker command above to launch a postgres instance with pgvector enabled.
 connection = "postgresql+psycopg://postgres:RAbbithole1234##@192.168.105.32:5432/postgres"  # Uses psycopg3!
-collection_name = "documents"
+collection_name = "langchain_pg_collection"
 
 vector_store = PGVector(
     embeddings=embeddings,
