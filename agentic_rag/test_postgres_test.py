@@ -203,7 +203,7 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
                 ORDER BY embedding <=> '{embedding_str}'::vector(384)
                 LIMIT :k
             """
-            search_query = text(search_query)
+            #search_query = text(search_query)
             print(f"Executing search query: {search_query}")
             result = conn.execute(text(search_query), {"collection_id": collection_uuid, "k": k})
             rows = result.fetchall()
