@@ -189,25 +189,35 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
             print(f"Collection UUID for '{collection_name}': {collection_uuid}")
             
             # Step 2: Perform the similarity search using vector operators
+            #search_query = f"""
+            #    SELECT e.document, e.cmetadata
+            #    FROM public.langchain_pg_embedding e
+            #    WHERE e.collection_id = :collection_id
+            #    ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
+            #    LIMIT :k
+            #"""
             search_query = f"""
-                SELECT e.document, e.cmetadata
-                FROM public.langchain_pg_embedding e
-                WHERE e.collection_id = :collection_id
-                ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
+                SELECT id,document,cmetadata,embedding <==> '{embedding_str}'::vector(384)
+                FROM public.langchain_pg_embedding
+                WHERE collection_id = :collection_id
+                ORDER BY embedding <=> '{embedding_str}'::vector(384)
                 LIMIT :k
             """
-            
+            search_query = text(search_query)
+            print(f"Executing search query: {search_query}")
             result = conn.execute(text(search_query), {"collection_id": collection_uuid, "k": k})
             rows = result.fetchall()
         
             # Process the results
+            #Retrieve the id, document content, and metadata
             for row in rows:
-                document_content = row[0]
+                document_content = row[1]
                 print(f"Document content: {document_content}")
                 # Handle metadata, if available
-                metadata = row[1] if row[1] else {}
+                metadata = row[2] if row[2] else {}
                 print(f"Document metadata: {metadata}")
                 documents.append(Document(
+                    id=row[0],
                     page_content=document_content,
                     metadata=metadata
                 ))
