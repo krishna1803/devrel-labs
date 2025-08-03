@@ -186,6 +186,8 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
                 
             collection_uuid = collection_row[0]
             
+            print(f"Collection UUID for '{collection_name}': {collection_uuid}")
+            
             # Step 2: Perform the similarity search using vector operators
             search_query = f"""
                 SELECT e.document, e.cmetadata
@@ -201,8 +203,10 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
             # Process the results
             for row in rows:
                 document_content = row[0]
+                print(f"Document content: {document_content}")
+                # Handle metadata, if available
                 metadata = row[1] if row[1] else {}
-                
+                print(f"Document metadata: {metadata}")
                 documents.append(Document(
                     page_content=document_content,
                     metadata=metadata
