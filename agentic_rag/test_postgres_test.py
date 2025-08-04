@@ -20,8 +20,9 @@ model_name = "sentence-transformers/all-MiniLM-L6-v2"
 embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
 # See docker command above to launch a postgres instance with pgvector enabled.
-connection = "postgresql+psycopg://postgres:RAbbithole1234##@192.168.105.32:5432/postgres"  # Uses psycopg3!
-collection_name = "langchain_pg_collection"
+connection = "postgresql+psycopg://postgres:RAbbithole1234##@192.168.105.32:5432/langchain"  # Uses psycopg3!
+#collection_name = "langchain_pg_collection"
+collection_name = "PDF Collection"
 
 vector_store = PGVector(
     embeddings=embeddings,
@@ -245,16 +246,16 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
 
 def main():
     # add_docs()
-    query = "Statute Stocktake?"
+    query = "What is Naman case?"
   
     
     # Describe tables and show sample data
-    describe_tables()
+    #describe_tables()
     
     #Execute similarity search functions
     print("\nExecuting similarity search functions...\n")
     print("Using similarity_search:")
-    #similarity_search(query)
+    similarity_search(query)
     #similarity_search_with_retriever(query)
     
     print("Using vector_similarity_search:")
