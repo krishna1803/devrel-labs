@@ -113,6 +113,99 @@ def query_postgres(query, k=3):
         
         return formatted_results
 
+def vector_similarity_search(query, collection_name="langchain_pg_collection", k=3):
+    """
+    Perform similarity search directly using PostgreSQL pgvector extension.
+    
+    Args:
+        query: The query string to search for
+        collection_name: Name of the collection in the database
+        k: Number of results to return
+        
+    Returns:
+        List of documents with content and metadata
+    """
+    # Get the embedding for the query using the same model that created the embeddings
+    query_embedding = embeddings.embed_query(query)
+    
+    # Create engine connection
+    engine = create_engine(connection)
+    
+    # Format the embedding vector as a PostgreSQL vector literal
+    embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+    
+    documents = []
+    
+    try:
+        with engine.begin() as conn:
+            # Step 1: Get the collection UUID for the given name
+            collection_query = text("""
+                SELECT uuid FROM public.langchain_pg_collection
+                WHERE name = :collection_name LIMIT 1
+            """)
+            collection_result = conn.execute(collection_query, {"collection_name": collection_name})
+            collection_row = collection_result.fetchone()
+            
+            if not collection_row:
+                print(f"Collection '{collection_name}' not found")
+                return []
+                
+            collection_uuid = collection_row[0]
+            
+            #collection_uuid = "74e2e511-2a14-425c-aa3d-56cdbb61ea2b"
+            
+            print(f"Collection UUID for '{collection_name}': {collection_uuid}")
+            
+            # Step 2: Perform the similarity search using vector operators
+            #search_query = f"""
+            #    SELECT e.document, e.cmetadata
+            #    FROM public.langchain_pg_embedding e
+            #    WHERE e.collection_id = :collection_id
+            #    ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
+            #    LIMIT :k
+            #"""
+            search_query = text(f"""
+                SELECT id, document, cmetadata, collection_id, 
+                       embedding <=> '{embedding_str}'::vector(384) as distance
+                FROM public.langchain_pg_embedding
+                WHERE collection_id = :collection_id
+                ORDER BY distance
+                LIMIT :k
+            """)
+            
+            #search_query = text(search_query)
+            print(f"Executing search query: {search_query}")
+            result = conn.execute(text(search_query), { "k": k})
+            rows = result.fetchall()
+        
+            # Process the results
+            #Retrieve the id, document content, and metadata
+            for row in rows:
+                document_content = row[1]
+                print(f"Document content: {document_content}")
+                # Handle metadata, if available
+                metadata = row[2] if row[2] else {}
+                print(f"Document metadata: {metadata}")
+                documents.append(Document(
+                    id=row[0],
+                    page_content=document_content,
+                    metadata=metadata
+                ))
+    
+    except Exception as e:
+        print(f"Error performing similarity search: {str(e)}")
+    finally:
+        engine.dispose()
+    
+    # Display results
+    print(f"\nDirect Vector Search: Found {len(documents)} results for query '{query}':")
+    for i, doc in enumerate(documents):
+        print(f"\nResult {i+1}:")
+        print(f"Content: {doc.page_content}")
+        print(f"Metadata: {doc.metadata}")
+    
+    return documents
+
 def main():
     add_docs()
     query = "What animals are found in the pond?"
@@ -120,6 +213,9 @@ def main():
     #similarity_search_with_retriever(query)
 
     query_postgres("What is Naman case?", k=3)
+    
+    print("Using vector_similarity_search:")
+    vector_similarity_search(query)
 
 if __name__ == "__main__":
     main()        

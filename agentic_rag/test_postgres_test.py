@@ -201,13 +201,15 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
             #    ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
             #    LIMIT :k
             #"""
-            search_query = f"""
-                SELECT id,document,cmetadata
+            search_query = text(f"""
+                SELECT id, document, cmetadata, collection_id, 
+                       embedding <=> '{embedding_str}'::vector(384) as distance
                 FROM public.langchain_pg_embedding
-                WHERE embedding <=> '{embedding_str}'::vector(384)
-                ORDER BY embedding <=> '{embedding_str}'::vector(384)
+                WHERE collection_id = :collection_id
+                ORDER BY distance
                 LIMIT :k
-            """
+            """)
+            
             #search_query = text(search_query)
             print(f"Executing search query: {search_query}")
             result = conn.execute(text(search_query), { "k": k})
