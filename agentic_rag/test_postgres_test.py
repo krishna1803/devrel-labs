@@ -238,7 +238,7 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
 
 def main():
     # add_docs()
-    query = "What is case between Naaman v Jaken Properties Australia Pty Limited?"
+    query = "Statute Stocktake?"
   
     
     # Describe tables and show sample data
