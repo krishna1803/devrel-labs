@@ -116,7 +116,7 @@ def query_postgres(query, k=3):
         
         return formatted_results
 
-def vector_similarity_search(query, collection_name="langchain_pg_collection", k=3):
+def vector_similarity_search(query, collection_name="PDF Collection", k=3):
     """
     Perform similarity search directly using PostgreSQL pgvector extension.
     
