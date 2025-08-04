@@ -189,7 +189,7 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
                 
             collection_uuid = collection_row[0]
             
-            collection_uuid = "74e2e511-2a14-425c-aa3d-56cdbb61ea2b"
+            #collection_uuid = "74e2e511-2a14-425c-aa3d-56cdbb61ea2b"
             
             print(f"Collection UUID for '{collection_name}': {collection_uuid}")
             
@@ -202,15 +202,15 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
             #    LIMIT :k
             #"""
             search_query = f"""
-                SELECT id,document,cmetadata,embedding <=> '{embedding_str}'::vector(384)
+                SELECT id,document,cmetadata
                 FROM public.langchain_pg_embedding
-                WHERE collection_id = :collection_id
-                ORDER BY embedding <=> '{embedding_str}'::vector(384)
+                WHERE embedding <=> '{embedding_str}'::vector(384) as distance
+                ORDRER BY distance
                 LIMIT :k
             """
             #search_query = text(search_query)
             print(f"Executing search query: {search_query}")
-            result = conn.execute(text(search_query), {"collection_id": collection_uuid, "k": k})
+            result = conn.execute(text(search_query), { "k": k})
             rows = result.fetchall()
         
             # Process the results
