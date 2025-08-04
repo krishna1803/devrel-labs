@@ -3,6 +3,9 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 from sqlalchemy import text
 
+from sqlalchemy import text, create_engine, inspect
+import pandas as pd
+
 # For running this code, you need to have a PostgreSQL instance running with pgvector enabled.
 # Use the following command to start a PostgreSQL instance with pgvector:
 #sudo docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
@@ -207,12 +210,12 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
     return documents
 
 def main():
-    add_docs()
-    query = "What animals are found in the pond?"
+    #add_docs()
+    query = "What is Naman case"
     #similarity_search(query)
     #similarity_search_with_retriever(query)
 
-    query_postgres("What is Naman case?", k=3)
+    #query_postgres("What is Naman case?", k=3)
     
     print("Using vector_similarity_search:")
     vector_similarity_search(query)
