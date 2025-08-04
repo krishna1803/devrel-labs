@@ -21,7 +21,7 @@ def is_url(string: str) -> bool:
         return False
 
 class PDFProcessor:
-    def __init__(self, tokenizer: str = "BAAI/bge-small-en-v1.5"):
+    def __init__(self, tokenizer: str = "sentence-transformers/all-MiniLM-L6-v2"):
         """Initialize PDF processor with Docling components"""
         # Suppress CUDA compilation warnings
         warnings.filterwarnings('ignore', category=UserWarning, module='torch.utils.cpp_extension')
@@ -206,7 +206,7 @@ def main():
     parser.add_argument("--input", required=True, 
                        help="Input PDF file, directory, or URL (http/https URLs supported)")
     parser.add_argument("--output", required=True, help="Output JSON file for chunks")
-    parser.add_argument("--tokenizer", default="BAAI/bge-small-en-v1.5", help="Tokenizer to use for chunking")
+    parser.add_argument("--tokenizer", default="sentence-transformers/all-MiniLM-L6-v2", help="Tokenizer to use for chunking")
     
     args = parser.parse_args()
     processor = PDFProcessor(tokenizer=args.tokenizer)
