@@ -143,7 +143,10 @@ def describe_tables(collection_name=collection_name):
                 print(df)
             else:
                 print("\nNo data found in this table.")
+
+    print("\n==== End of table descriptions ====\n")
     
+
     # Close the engine
     engine.dispose()
 
@@ -185,6 +188,8 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
                 return []
                 
             collection_uuid = collection_row[0]
+            
+            collection_uuid = "74e2e511-2a14-425c-aa3d-56cdbb61ea2b"
             
             print(f"Collection UUID for '{collection_name}': {collection_uuid}")
             
@@ -247,8 +252,8 @@ def main():
     #Execute similarity search functions
     print("\nExecuting similarity search functions...\n")
     print("Using similarity_search:")
-    similarity_search(query)
-    similarity_search_with_retriever(query)
+    #similarity_search(query)
+    #similarity_search_with_retriever(query)
     
     print("Using vector_similarity_search:")
     vector_similarity_search(query)
