@@ -250,7 +250,7 @@ def main():
   
     
     # Describe tables and show sample data
-    #describe_tables()
+    describe_tables(collection_name="PDF Collection")
     
     #Execute similarity search functions
     print("\nExecuting similarity search functions...\n")
@@ -259,7 +259,7 @@ def main():
     #similarity_search_with_retriever(query)
     
     print("Using vector_similarity_search:")
-    vector_similarity_search(query)
+    #vector_similarity_search(query)
         
 if __name__ == "__main__":
     main()
