@@ -197,7 +197,7 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
             #    LIMIT :k
             #"""
             search_query = f"""
-                SELECT id,document,cmetadata,embedding <==> '{embedding_str}'::vector(384)
+                SELECT id,document,cmetadata,embedding <=> '{embedding_str}'::vector(384)
                 FROM public.langchain_pg_embedding
                 WHERE collection_id = :collection_id
                 ORDER BY embedding <=> '{embedding_str}'::vector(384)
