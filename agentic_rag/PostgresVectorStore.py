@@ -237,7 +237,7 @@ class PostgresVectorStore(VectorStore):
         
         # Create engine connection
         engine = create_engine(self.connectionstring)
-        print(f'Connection string: {self.connectionstring}')
+        #print(f'Connection string: {self.connectionstring}')
          
         # Format the embedding vector as a PostgreSQL vector literal
         embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"

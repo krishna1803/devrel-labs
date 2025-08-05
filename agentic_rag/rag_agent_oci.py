@@ -643,7 +643,19 @@ def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
         model_id = request["model"] or credentials.get("OCI_MODEL_ID", "meta.llama-4-maverick-17b-128e-instruct-fp8")
         vector_db = credentials.get("VECTOR_DB", "postgres")
         #Convert use_cot string to bool value when creating the OCI RAG Agent
-        use_cot = request["use_cot"] or credentials.get("USE_COT", "false").lower() == "true"
+        # Convert the use_cot string to a proper boolean
+        use_cot_value = request.get("use_cot")
+        if isinstance(use_cot_value, str):
+            use_cot = use_cot_value.lower() == "true"
+        elif use_cot_value is None:
+            # Fall back to the config value
+            use_cot = credentials.get("USE_COT", "false").lower() == "true"
+        else:
+            # If it's already a boolean or other type, use standard conversion
+            use_cot = bool(use_cot_value)
+
+        logger.info(f"Use Chain of Thought reasoning: {use_cot} (from input: {use_cot_value})")
+        #use_cot = request["use_cot"] or credentials.get("USE_COT", "false").lower() == "true"
 
         # Check for OCI compartment ID
         if not compartment_id:
