@@ -77,7 +77,7 @@ else:
 
 class QueryRequest(BaseModel):
     query: str
-    use_cot: Optional[str] = False
+    use_cot: bool = False  # Default to False
     model: Optional[str] = None  # Allow specifying model in the request
 
 class QueryResponse(BaseModel):
