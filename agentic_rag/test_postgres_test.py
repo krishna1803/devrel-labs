@@ -103,13 +103,12 @@ def similarity_search_with_retriever(query, k=3):
     return results
 
 #Function to describe the database tables and show sample rows
-def describe_tables(collection_name=collection_name):
-    """
+"""def describe_tables(collection_name=collection_name):
+    
     Describe the database tables related to the collection and show the first 5 rows of each table.
     
     Args:
         collection_name: The name of the collection in PGVector
-    """
     # Create SQLAlchemy engine from connection string
     engine = create_engine(connection)
     
@@ -149,9 +148,9 @@ def describe_tables(collection_name=collection_name):
     
 
     # Close the engine
-    engine.dispose()
+    engine.dispose() """
 
-def vector_similarity_search(query, collection_name="langchain_pg_collection", k=3):
+def vector_similarity_search(query, k=3):
     """
     Perform similarity search directly using PostgreSQL pgvector extension.
     
@@ -176,45 +175,25 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
     
     try:
         with engine.begin() as conn:
-            # Step 1: Get the collection UUID for the given name
-            collection_query = text("""
-                SELECT uuid FROM public.langchain_pg_collection
-                WHERE name = :collection_name LIMIT 1
-            """)
-            collection_result = conn.execute(collection_query, {"collection_name": collection_name})
-            collection_row = collection_result.fetchone()
             
-            if not collection_row:
-                print(f"Collection '{collection_name}' not found")
-                return []
-                
-            collection_uuid = collection_row[0]
             
-            #collection_uuid = "74e2e511-2a14-425c-aa3d-56cdbb61ea2b"
-            
-            print(f"Collection UUID for '{collection_name}': {collection_uuid}")
-            
-            # Step 2: Perform the similarity search using vector operators
-            #search_query = f"""
-            #    SELECT e.document, e.cmetadata
-            #    FROM public.langchain_pg_embedding e
-            #    WHERE e.collection_id = :collection_id
-            #    ORDER BY e.embedding <=> '{embedding_str}'::vector(384)
+            #search_query = text(f"""
+            #    SELECT id, document, cmetadata, collection_id, 
+            #           embedding <=> '{embedding_str}'::vector(384) as distance
+            #    FROM public.langchain_pg_embedding
+            #    WHERE collection_id = :collection_id
+            #    ORDER BY distance
             #    LIMIT :k
-            #"""
-            search_query = text(f"""
-                SELECT id, document, cmetadata, collection_id, 
-                       embedding <=> '{embedding_str}'::vector(384) as distance
-                FROM public.langchain_pg_embedding
-                WHERE collection_id = :collection_id
-                ORDER BY distance
-                LIMIT :k
-            """)
-            
+            #""")
+            search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector(384) AS distance
+                            FROM documents a JOIN embeddings b ON a.id = b.doc_id
+                            LIMIT {k}; """
+
             #search_query = text(search_query)
             print(f"Executing search query: {search_query}")
             result = conn.execute(text(search_query), { "k": k})
             rows = result.fetchall()
+        
         
             # Process the results
             #Retrieve the id, document content, and metadata
@@ -222,12 +201,15 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
                 document_content = row[1]
                 print(f"Document content: {document_content}")
                 # Handle metadata, if available
-                metadata = row[2] if row[2] else {}
+                metadata = row[3] if row[3] else {}
+                distance = row[4]
+                print(f"Distance: {distance}")
                 print(f"Document metadata: {metadata}")
                 documents.append(Document(
-                    id=row[0],
+                    id=row[2],
                     page_content=document_content,
-                    metadata=metadata
+                    metadata=metadata,
+                    distance=distance
                 ))
     
     except Exception as e:
@@ -246,20 +228,19 @@ def vector_similarity_search(query, collection_name="langchain_pg_collection", k
 
 def main():
     # add_docs()
-    query = "What is Naman case?"
-  
-    
+    query = "Discrimination?"
+
     # Describe tables and show sample data
-    describe_tables(collection_name="PDF Collection")
+    #describe_tables(collection_name="PDF Collection")
     
     #Execute similarity search functions
-    print("\nExecuting similarity search functions...\n")
-    print("Using similarity_search:")
-    similarity_search(query)
+    #print("\nExecuting similarity search functions...\n")
+    #print("Using similarity_search:")
+    #similarity_search(query)
     #similarity_search_with_retriever(query)
     
     print("Using vector_similarity_search:")
-    #vector_similarity_search(query)
+    vector_similarity_search(query)
         
 if __name__ == "__main__":
     main()
