@@ -187,6 +187,7 @@ def vector_similarity_search(query, k=3):
             #""")
             search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector(384) AS distance
                             FROM documents a JOIN embeddings b ON a.id = b.doc_id
+                            ORDER BY distance
                             LIMIT {k}; """
 
             #search_query = text(search_query)
@@ -240,7 +241,7 @@ def main():
     #similarity_search_with_retriever(query)
     
     print("Using vector_similarity_search:")
-    vector_similarity_search(query)
+    vector_similarity_search(query,k=10)
         
 if __name__ == "__main__":
     main()
