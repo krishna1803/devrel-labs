@@ -248,33 +248,61 @@ class PostgresVectorStore(VectorStore):
         try:
             with engine.begin() as conn:
                 
-                print(f"Using embedding vector: {embedding_str}")
+                print(f"Using embedding vector: {embedding_str[:50]}...")
                 search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector({embedding_dim}) AS distance
                                 FROM documents a JOIN embeddings b ON a.id = b.doc_id
                                 ORDER BY distance
                                 LIMIT {k}; """
 
-                #search_query = text(search_query)
-                print(f"Executing search query: {search_query}")
+                print(f"Executing search query...")
                 result = conn.execute(text(search_query), { "k": k})
                 rows = result.fetchall()
-            
         
                 # Format results
                 formatted_results = []
                 for row in rows:
-                    print(f"Document content: {row[1]}")
-                    result = {
-                        "content": row[1],
-                        "metadata": json.loads(row[3]) if isinstance(row[3], str) else row[3]
+                    source = row[0]
+                    content = row[1]
+                    doc_id = row[2]
+                    chunk_metadata = row[3]
+                    distance = row[4]
+                    
+                    # Process metadata - either parse JSON or use as is
+                    if isinstance(chunk_metadata, str):
+                        try:
+                            base_metadata = json.loads(chunk_metadata)
+                        except json.JSONDecodeError:
+                            base_metadata = {"raw_metadata": chunk_metadata}
+                    elif chunk_metadata is None:
+                        base_metadata = {}
+                    else:
+                        base_metadata = chunk_metadata
+                    
+                    # Add source and doc_id to metadata
+                    enhanced_metadata = {
+                        **base_metadata,
+                        "source": source,
+                        "page_numbers": doc_id,
+                        "similarity_score": float(distance)
                     }
-                    formatted_results.append(result)
+                    
+                    # Create the formatted result
+                    result_item = {
+                        "content": content,
+                        "metadata": enhanced_metadata
+                    }
+
+                    print(f"Document from: {source}, Page Numbers: {doc_id}, Score: {distance}")
+                    formatted_results.append(result_item)
                 
-                print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from PDF Collection")
+                print(f"🔍 [PostgresDB] Retrieved {len(formatted_results)} chunks from PDF Collection")
                 return formatted_results    
-        
+    
         except Exception as e:
             print(f"Error performing similarity search: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
         finally:
             engine.dispose()
         
