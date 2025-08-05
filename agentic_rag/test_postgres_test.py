@@ -228,7 +228,7 @@ def vector_similarity_search(query, k=3):
 
 def main():
     # add_docs()
-    query = "Discrimination?"
+    query = "Tell me about Mabo vs Queensland?"
 
     # Describe tables and show sample data
     #describe_tables(collection_name="PDF Collection")
