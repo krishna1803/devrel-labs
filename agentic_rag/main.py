@@ -65,7 +65,7 @@ else:
         if ollama_available:
             try:
                 print("\nFalling back to Ollama with llama3 model...")
-                rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="ollama:llama3")
+                rag_agent = LocalRAGAgent(vector_store=vector_store, model_name="ollama:llama3.2:3b")
                 print("Successfully initialized Ollama with llama3 model.")
             except Exception as e:
                 print(f"\nFailed to initialize Ollama: {str(e)}")
