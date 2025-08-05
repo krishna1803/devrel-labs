@@ -184,22 +184,23 @@ class PostgresVectorStore(VectorStore):
     def query_pdf_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Query the PDF documents collection"""
         print("🔍 [Postgres] Querying PDF Collection")
-        # Generate Embeddings
-        results = self.vectorstore.similarity_search(query, k=n_results)
-        if not results:
-            print("No results found for the query.")
-            return []
-        print(f"Found {len(results)} results for query '{query}':")
-        for i, result in enumerate(results):
-            print(f"\nResult {i+1}:")
-            print(f"Content: {result.page_content}")
-            print(f"Metadata: {result.metadata}")
         
-        print(f"🔍 [Postgres] Retrieved {len(results)} chunks from PDF Collection")
-         # Convert Document objects to dictionaries
-        converted_results = self._convert_documents_to_dict(results)
-        print(f"🔍 [Postgres] Retrieved {len(converted_results)} chunks from PDF Collection")
-        return converted_results
+        try:
+            # Use your custom implementation directly instead of vectorstore's implementation
+            formatted_results = self.similarity_search(query, k=n_results)
+            
+            if not formatted_results:
+                print("No results found for the query.")
+                return []
+                
+            print(f"🔍 [Postgres] Retrieved {len(formatted_results)} chunks from PDF Collection")
+            return formatted_results
+            
+        except Exception as e:
+            print(f"Error in query_pdf_collection: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def query_general_collection(self, query: str, n_results: int = 3) -> List[Dict[str, Any]]:
         results = self.vectorstore.similarity_search(query, k=n_results)
@@ -229,7 +230,6 @@ class PostgresVectorStore(VectorStore):
         self, query: str, k: int = 3
     ) -> List[Dict[str, Any]]:
         """Return docs most similar to query."""
-        print
         logging.info(f"Similarity Search for Postgres Vector Store")
 
         # Get the embedding for the query using the same model that created the embeddings
@@ -241,14 +241,15 @@ class PostgresVectorStore(VectorStore):
          
         # Format the embedding vector as a PostgreSQL vector literal
         embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
-        
-        documents = []
-        
+        embedding_dim = len(query_embedding)  # Get actual dimension
+
+        formatted_results = []
+
         try:
             with engine.begin() as conn:
                 
-                
-                search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector(384) AS distance
+                print(f"Using embedding vector: {embedding_str}")
+                search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector({embedding_dim}) AS distance
                                 FROM documents a JOIN embeddings b ON a.id = b.doc_id
                                 ORDER BY distance
                                 LIMIT {k}; """
@@ -258,26 +259,11 @@ class PostgresVectorStore(VectorStore):
                 result = conn.execute(text(search_query), { "k": k})
                 rows = result.fetchall()
             
-            
-                # Process the results
-                #Retrieve the id, document content, and metadata
-                for row in rows:
-                    document_content = row[1]
-                    print(f"Document content: {document_content}")
-                    # Handle metadata, if available
-                    metadata = row[3] if row[3] else {}
-                    distance = row[4]
-                    print(f"Distance: {distance}")
-                    print(f"Document metadata: {metadata}")
-                    documents.append(Document(
-                        id=row[2],
-                        page_content=document_content,
-                        metadata=metadata,
-                        distance=distance
-                    ))
+        
                 # Format results
                 formatted_results = []
                 for row in rows:
+                    print(f"Document content: {row[1]}")
                     result = {
                         "content": row[1],
                         "metadata": json.loads(row[3]) if isinstance(row[3], str) else row[3]
