@@ -229,6 +229,7 @@ class PostgresVectorStore(VectorStore):
         self, query: str, k: int = 3
     ) -> List[Dict[str, Any]]:
         """Return docs most similar to query."""
+        print
         logging.info(f"Similarity Search for Postgres Vector Store")
 
         # Get the embedding for the query using the same model that created the embeddings
@@ -236,7 +237,8 @@ class PostgresVectorStore(VectorStore):
         
         # Create engine connection
         engine = create_engine(self.connectionstring)
-        
+        print(f'Connection string: {self.connectionstring}')
+         
         # Format the embedding vector as a PostgreSQL vector literal
         embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
         

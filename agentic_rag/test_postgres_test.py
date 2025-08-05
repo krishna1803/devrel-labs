@@ -162,6 +162,7 @@ def vector_similarity_search(query, k=3):
     Returns:
         List of documents with content and metadata
     """
+    print(f"\n=== Performing vector similarity search for query: '{query}' ===")
     # Get the embedding for the query using the same model that created the embeddings
     query_embedding = embeddings.embed_query(query)
     
@@ -176,6 +177,7 @@ def vector_similarity_search(query, k=3):
     try:
         with engine.begin() as conn:
             
+            print(f"Using embedding vector: {embedding_str}")
             
             #search_query = text(f"""
             #    SELECT id, document, cmetadata, collection_id, 
