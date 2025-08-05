@@ -19,6 +19,9 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from langchain_postgres import PGVector
+from sqlalchemy import text, create_engine, inspect
+
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 #import psycopg2
 #from psycopg2.extras import Json
@@ -29,6 +32,11 @@ import json
 
 #from sentence_transformers import SentenceTransformer
 from langchain_ollama import OllamaEmbeddings
+
+model_name = "sentence-transformers/all-MiniLM-L6-v2"
+embeddings = HuggingFaceEmbeddings(model_name=model_name)
+
+
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +58,7 @@ class PostgresVectorStore(VectorStore):
         verbose: Optional[bool] = False,
         vectorstore: Optional[Any] = None,
         cursor: Optional[Any] = None,
+        connectionstring: Optional[str] = None,
     ) -> None:
         self.verbose = verbose
     
@@ -73,12 +82,12 @@ class PostgresVectorStore(VectorStore):
         # Connect to the database
         try:
             #prepare connection string
-            conn_string = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"  # Uses psycopg3!
+            self.connectionstring = conn_string = f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"  # Uses psycopg3!
 
             vector_store = PGVector(
                         embeddings=self._embedding_function,
                         collection_name=collection_name,
-                        connection=conn_string,
+                        connection=self.connectionstring,
                         use_jsonb=True,
             ) 
             self.vectorstore = vector_store
@@ -213,8 +222,77 @@ class PostgresVectorStore(VectorStore):
                 "metadata": doc.metadata
             })
         return result 
-     
+     #
+    # similarity_search
+    #
     def similarity_search(
+        self, query: str, k: int = 3
+    ) -> List[Dict[str, Any]]:
+        """Return docs most similar to query."""
+        logging.info(f"Similarity Search for Postgres Vector Store")
+
+        # Get the embedding for the query using the same model that created the embeddings
+        query_embedding = embeddings.embed_query(query)
+        
+        # Create engine connection
+        engine = create_engine(self.connectionstring)
+        
+        # Format the embedding vector as a PostgreSQL vector literal
+        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        
+        documents = []
+        
+        try:
+            with engine.begin() as conn:
+                
+                
+                search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector(384) AS distance
+                                FROM documents a JOIN embeddings b ON a.id = b.doc_id
+                                ORDER BY distance
+                                LIMIT {k}; """
+
+                #search_query = text(search_query)
+                print(f"Executing search query: {search_query}")
+                result = conn.execute(text(search_query), { "k": k})
+                rows = result.fetchall()
+            
+            
+                # Process the results
+                #Retrieve the id, document content, and metadata
+                for row in rows:
+                    document_content = row[1]
+                    print(f"Document content: {document_content}")
+                    # Handle metadata, if available
+                    metadata = row[3] if row[3] else {}
+                    distance = row[4]
+                    print(f"Distance: {distance}")
+                    print(f"Document metadata: {metadata}")
+                    documents.append(Document(
+                        id=row[2],
+                        page_content=document_content,
+                        metadata=metadata,
+                        distance=distance
+                    ))
+                # Format results
+                formatted_results = []
+                for row in rows:
+                    result = {
+                        "content": row[1],
+                        "metadata": json.loads(row[3]) if isinstance(row[3], str) else row[3]
+                    }
+                    formatted_results.append(result)
+                
+                print(f"🔍 [Oracle DB] Retrieved {len(formatted_results)} chunks from PDF Collection")
+                return formatted_results    
+        
+        except Exception as e:
+            print(f"Error performing similarity search: {str(e)}")
+        finally:
+            engine.dispose()
+        
+    
+     
+    """def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
     ) -> List[Dict[str, Any]]:
         results = self.vectorstore.similarity_search(query, k=k)
@@ -229,14 +307,14 @@ class PostgresVectorStore(VectorStore):
         return results
     
     def as_retriever(self):
-        """Return a retriever that uses this vector store for semantic search."""
+        # Return a retriever that uses this vector store for semantic search.
         from langchain.retrievers import VectorStoreRetriever
         
         return VectorStoreRetriever(
             vectorstore=self,
             search_type="similarity",
             search_kwargs={"k": 10}
-        )
+        )"""
     
     @classmethod
     def from_texts(
