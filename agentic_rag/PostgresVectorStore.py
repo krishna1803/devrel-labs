@@ -223,9 +223,92 @@ class PostgresVectorStore(VectorStore):
                 "metadata": doc.metadata
             })
         return result 
-     #           
-     
+     #
+    # similarity_search
+    #
     def similarity_search(
+        self, query: str, k: int = 3
+    ) -> List[Dict[str, Any]]:
+        """Return docs most similar to query."""
+        logging.info(f"Similarity Search for Postgres Vector Store")
+
+        # Get the embedding for the query using the same model that created the embeddings
+        query_embedding = embeddings.embed_query(query)
+        
+        # Create engine connection
+        engine = create_engine(self.connectionstring)
+        #print(f'Connection string: {self.connectionstring}')
+         
+        # Format the embedding vector as a PostgreSQL vector literal
+        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        embedding_dim = len(query_embedding)  # Get actual dimension
+
+        formatted_results = []
+
+        try:
+            with engine.begin() as conn:
+                
+                print(f"Using embedding vector: {embedding_str[:50]}...")
+                search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector({embedding_dim}) AS distance
+                                FROM documents a JOIN embeddings b ON a.id = b.doc_id
+                                ORDER BY distance 
+                                LIMIT {k}; """
+
+                print(f"Executing search query...")
+                result = conn.execute(text(search_query), { "k": k})
+                rows = result.fetchall()
+        
+                # Format results
+                formatted_results = []
+                for row in rows:
+                    source = row[0]
+                    content = row[1]
+                    doc_id = row[2]
+                    chunk_metadata = row[3]
+                    distance = row[4]
+                    
+                    # Process metadata - either parse JSON or use as is
+                    if isinstance(chunk_metadata, str):
+                        try:
+                            base_metadata = json.loads(chunk_metadata)
+                        except json.JSONDecodeError:
+                            base_metadata = {"raw_metadata": chunk_metadata}
+                    elif chunk_metadata is None:
+                        base_metadata = {}
+                    else:
+                        base_metadata = chunk_metadata
+                    
+                    # Add source and doc_id to metadata
+                    enhanced_metadata = {
+                        **base_metadata,
+                        "source": source,
+                        "page_numbers": doc_id,
+                        "similarity_score": float(distance)
+                    }
+                    
+                    # Create the formatted result
+                    result_item = {
+                        "content": content,
+                        "metadata": enhanced_metadata
+                    }
+
+                    print(f"Document from: {source}, Page Numbers: {doc_id}, Score: {distance}")
+                    formatted_results.append(result_item)
+                
+                print(f"🔍 [PostgresDB] Retrieved {len(formatted_results)} chunks from PDF Collection")
+                return formatted_results    
+    
+        except Exception as e:
+            print(f"Error performing similarity search: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+        finally:
+            engine.dispose()
+        
+    
+     
+    """def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
     ) -> List[Dict[str, Any]]:
         results = self.vectorstore.similarity_search(query, k=k)
@@ -247,7 +330,7 @@ class PostgresVectorStore(VectorStore):
             vectorstore=self,
             search_type="similarity",
             search_kwargs={"k": 10}
-        )
+        )"""
     
     @classmethod
     def from_texts(
