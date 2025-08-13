@@ -226,7 +226,7 @@ class PostgresVectorStore(VectorStore):
      #
     # similarity_search
     #
-    def similarity_search(
+    """def similarity_search(
         self, query: str, k: int = 3
     ) -> List[Dict[str, Any]]:
         """Return docs most similar to query."""
@@ -251,7 +251,7 @@ class PostgresVectorStore(VectorStore):
                 print(f"Using embedding vector: {embedding_str[:50]}...")
                 search_query = f"""SELECT a.source, a.content, b.doc_id, b.chunk_metadata, b.vector <=> '{embedding_str}'::vector({embedding_dim}) AS distance
                                 FROM documents a JOIN embeddings b ON a.id = b.doc_id
-                                ORDER BY distance
+                                ORDER BY distance 
                                 LIMIT {k}; """
 
                 print(f"Executing search query...")
@@ -304,11 +304,11 @@ class PostgresVectorStore(VectorStore):
             traceback.print_exc()
             return []
         finally:
-            engine.dispose()
+            engine.dispose()"""
         
     
      
-    """def similarity_search(
+    def similarity_search(
         self, query: str, k: int = 3, **kwargs: Any
     ) -> List[Dict[str, Any]]:
         results = self.vectorstore.similarity_search(query, k=k)
@@ -316,7 +316,7 @@ class PostgresVectorStore(VectorStore):
         return results
     
     #Function to imlement similarity search with a retriever
-    def similarity_search_with_retriever(self,query:str, k=3) -> List[Dict[str, Any]]:
+    """def similarity_search_with_retriever(self,query:str, k=3) -> List[Dict[str, Any]]:
         retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k})
         results = retriever.invoke(query)
         print(f"Found {len(results)} results for query '{query}':")
